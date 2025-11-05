@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Admin Panel Styles */
+.menu-item {
+  @apply flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200;
+}
+
+.menu-item-active {
+  @apply bg-blue-50 text-blue-700 border-r-2 border-blue-500;
+}
+
+.menu-item-inactive {
+  @apply text-gray-600 hover:bg-gray-50 hover:text-gray-900;
+}
+
+.menu-item-icon-size {
+  @apply flex items-center justify-center w-5 h-5;
+}
+
+.menu-item-icon-active {
+  @apply text-blue-600;
+}
+
+.menu-item-icon-inactive {
+  @apply text-gray-500;
+}
+
+.menu-item-text {
+  @apply truncate;
+}
+
+/* Scrollbar Styles */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Professional Card Styles */
+.professional-card {
+  @apply bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200;
+}
+
+.professional-button {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.professional-button-primary {
+  @apply bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500;
+}
+
+.professional-button-secondary {
+  @apply bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500;
+}
+
+.professional-button-success {
+  @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+}
+
+.professional-button-danger {
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+}
+
+/* Table Styles */
+.professional-table {
+  @apply w-full text-sm text-left text-gray-500;
+}
+
+.professional-table thead {
+  @apply text-xs text-gray-700 uppercase bg-gray-50;
+}
+
+.professional-table th {
+  @apply px-6 py-3;
+}
+
+.professional-table td {
+  @apply px-6 py-4 whitespace-nowrap;
+}
+
+.professional-table tbody tr {
+  @apply bg-white border-b hover:bg-gray-50;
+}
+
+/* Status Badges */
+.status-badge {
+  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+}
+
+.status-badge-success {
+  @apply bg-green-100 text-green-800;
+}
+
+.status-badge-warning {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.status-badge-danger {
+  @apply bg-red-100 text-red-800;
+}
+
+.status-badge-info {
+  @apply bg-blue-100 text-blue-800;
+}
+
+.status-badge-gray {
+  @apply bg-gray-100 text-gray-800;
+}
+
+/* Alert Animations */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
+.animate-slide-out {
+  animation: slide-out 0.3s ease-in;
+}
