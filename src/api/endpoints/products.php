@@ -69,11 +69,29 @@ try {
         $q = isset($_GET['q']) ? trim($_GET['q']) : '';
 
         $where = '';
-        if ($q !== '') $where = "WHERE p.name LIKE :q OR p.sku LIKE :q";
+        $searchColumns = [
+            'p.name',
+            'p.sku',
+            'p.description',
+            'p.brand',
+            'p.dimensions',
+        ];
+
+        if ($q !== '') {
+            $likeParts = [];
+            foreach ($searchColumns as $idx => $column) {
+                $likeParts[] = "{$column} LIKE :q{$idx}";
+            }
+            $where = 'WHERE (' . implode(' OR ', $likeParts) . ')';
+        }
 
         $countSql = "SELECT COUNT(*) FROM products p " . ($where ? $where : "");
         $countStmt = $pdo->prepare($countSql);
-        if ($q !== '') $countStmt->bindValue(':q', "%{$q}%", PDO::PARAM_STR);
+        if ($q !== '') {
+            foreach ($searchColumns as $idx => $_) {
+                $countStmt->bindValue(":q{$idx}", "%{$q}%", PDO::PARAM_STR);
+            }
+        }
         $countStmt->execute();
         $total = (int)$countStmt->fetchColumn();
 
@@ -86,7 +104,11 @@ try {
             LIMIT $limit OFFSET $offset
         ";
         $stmt = $pdo->prepare($sql);
-        if ($q !== '') $stmt->bindValue(':q', "%{$q}%", PDO::PARAM_STR);
+        if ($q !== '') {
+            foreach ($searchColumns as $idx => $_) {
+                $stmt->bindValue(":q{$idx}", "%{$q}%", PDO::PARAM_STR);
+            }
+        }
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

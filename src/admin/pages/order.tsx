@@ -99,10 +99,22 @@ const Orders: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCustomerHistory, setSelectedCustomerHistory] = useState<any[]>([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null);
-  const [selectedProductId, setSelectedProductId] = useState<number>(0);
-  const [productQuantity, setProductQuantity] = useState<number>(1);
-  const [orderItems, setOrderItems] = useState<Array<{
+  const [createSelectedCategoryId, setCreateSelectedCategoryId] = useState<number | null>(null);
+  const [createSelectedProductId, setCreateSelectedProductId] = useState<number>(0);
+  const [createProductQuantity, setCreateProductQuantity] = useState<number>(1);
+  const [createItems, setCreateItems] = useState<Array<{
+    product_id: number;
+    category_id: number;
+    product_name: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+  }>>([]);
+  const [editSelectedCategoryId, setEditSelectedCategoryId] = useState<number | null>(null);
+  const [editSelectedProductId, setEditSelectedProductId] = useState<number>(0);
+  const [editProductQuantity, setEditProductQuantity] = useState<number>(1);
+  const [editItems, setEditItems] = useState<Array<{
+    id?: number;
     product_id: number;
     category_id: number;
     product_name: string;
@@ -216,10 +228,10 @@ const Orders: React.FC = () => {
 
   const openCreateModal = async () => {
     setOpenCreate(true);
-    setOrderItems([]);
-    setSelectedCategoryId(null);
-    setSelectedProductId(0);
-    setProductQuantity(1);
+    setCreateItems([]);
+    setCreateSelectedCategoryId(null);
+    setCreateSelectedProductId(0);
+    setCreateProductQuantity(1);
     setSelectedCustomerHistory([]);
     setCreateForm({
       customer_id: 0,
@@ -308,82 +320,136 @@ const Orders: React.FC = () => {
   };
 
   // Filter products by category
-  const filteredProducts = useMemo(() => {
-    if (!selectedCategoryId) return products;
-    return products.filter(p => p.category_id === selectedCategoryId);
-  }, [products, selectedCategoryId]);
+  const createFilteredProducts = useMemo(() => {
+    if (!createSelectedCategoryId) return products;
+    return products.filter(p => p.category_id === createSelectedCategoryId);
+  }, [products, createSelectedCategoryId]);
 
-  // Add product to order
-  const handleAddProduct = () => {
-    if (!selectedProductId || productQuantity <= 0) {
+  const editFilteredProducts = useMemo(() => {
+    if (!editSelectedCategoryId) return products;
+    return products.filter(p => p.category_id === editSelectedCategoryId);
+  }, [products, editSelectedCategoryId]);
+
+  const handleCreateAddProduct = () => {
+    if (!createSelectedProductId || createProductQuantity <= 0) {
       showAlert('warning', 'Please select a product and enter quantity');
       return;
     }
     
-    const product = filteredProducts.find(p => p.id === selectedProductId);
+    const product = createFilteredProducts.find(p => p.id === createSelectedProductId);
     if (!product) {
       showAlert('error', 'Product not found');
       return;
     }
     
-    if (productQuantity > product.stock) {
+    if (createProductQuantity > product.stock) {
       showAlert('warning', `Only ${product.stock} items available in stock`);
       return;
     }
     
-    const subtotal = product.price * productQuantity;
-    setOrderItems([...orderItems, {
+    const subtotal = product.price * createProductQuantity;
+    setCreateItems(prev => [...prev, {
       product_id: product.id,
       category_id: product.category_id || 0,
       product_name: product.name,
-      quantity: productQuantity,
+      quantity: createProductQuantity,
       price: product.price,
       subtotal,
     }]);
     
     // Reset inputs
-    setSelectedProductId(0);
-    setProductQuantity(1);
-    setSelectedCategoryId(null);
-    
-    // Update total
-    updateTotal();
+    setCreateSelectedProductId(0);
+    setCreateProductQuantity(1);
+    setCreateSelectedCategoryId(null);
   };
 
-  // Remove product from order
-  const handleRemoveProduct = (index: number) => {
-    const newItems = orderItems.filter((_, i) => i !== index);
-    setOrderItems(newItems);
-    updateTotal();
+  const handleCreateRemoveProduct = (index: number) => {
+    setCreateItems(prev => prev.filter((_, i) => i !== index));
   };
 
-  // Update quantity of a product
-  const handleUpdateQuantity = (index: number, quantity: number) => {
+  const handleCreateUpdateQuantity = (index: number, quantity: number) => {
     if (quantity <= 0) return;
-    const item = orderItems[index];
+    const item = createItems[index];
     const product = products.find(p => p.id === item.product_id);
     if (product && quantity > product.stock) {
       showAlert('warning', `Only ${product.stock} items available in stock`);
       return;
     }
-    const newItems = [...orderItems];
-    newItems[index].quantity = quantity;
-    newItems[index].subtotal = newItems[index].price * quantity;
-    setOrderItems(newItems);
-    updateTotal();
+    setCreateItems(prev => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        quantity,
+        subtotal: copy[index].price * quantity,
+      };
+      return copy;
+    });
   };
 
-  // Auto-calculate total
-  const updateTotal = () => {
-    const total = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-    setCreateForm({ ...createForm, total_amount: total });
-  };
-
-  // Auto-update total when items change
   useEffect(() => {
-    updateTotal();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderItems]);
+    const total = createItems.reduce((sum, item) => sum + item.subtotal, 0);
+    setCreateForm(prev => ({ ...prev, total_amount: total }));
+  }, [createItems]);
+
+  const handleEditAddProduct = () => {
+    if (!editSelectedProductId || editProductQuantity <= 0) {
+      showAlert('warning', 'Please select a product and enter quantity');
+      return;
+    }
+
+    const product = editFilteredProducts.find(p => p.id === editSelectedProductId);
+    if (!product) {
+      showAlert('error', 'Product not found');
+      return;
+    }
+
+    if (editProductQuantity > product.stock) {
+      showAlert('warning', `Only ${product.stock} items available in stock`);
+      return;
+    }
+
+    const subtotal = product.price * editProductQuantity;
+    setEditItems(prev => [...prev, {
+      product_id: product.id,
+      category_id: product.category_id || 0,
+      product_name: product.name,
+      quantity: editProductQuantity,
+      price: product.price,
+      subtotal,
+    }]);
+
+    setEditSelectedProductId(0);
+    setEditProductQuantity(1);
+    setEditSelectedCategoryId(null);
+  };
+
+  const handleEditRemoveProduct = (index: number) => {
+    setEditItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditUpdateQuantity = (index: number, quantity: number) => {
+    if (quantity <= 0) return;
+    const item = editItems[index];
+    const product = products.find(p => p.id === item.product_id);
+    if (product && quantity > product.stock) {
+      showAlert('warning', `Only ${product.stock} items available in stock`);
+      return;
+    }
+    setEditItems(prev => {
+      const copy = [...prev];
+      copy[index] = {
+        ...copy[index],
+        quantity,
+        subtotal: copy[index].price * quantity,
+      };
+      return copy;
+    });
+  };
+
+  useEffect(() => {
+    const total = editItems.reduce((sum, item) => sum + item.subtotal, 0);
+    setEditForm(prev => ({ ...prev, total_amount: total }));
+  }, [editItems]);
 
   const getCustomerFirm = (customerId: number) => {
     const customer = customers.find(c => c.id === customerId);
@@ -419,6 +485,10 @@ const Orders: React.FC = () => {
   const handleEditOrder = async (order: ListOrder) => {
     setSelectedOrder(order);
     setOrderItemsView([]); // Reset first
+    setEditItems([]);
+    setEditSelectedCategoryId(null);
+    setEditSelectedProductId(0);
+    setEditProductQuantity(1);
     setEditForm({
       customer_id: order.customer_id,
       total_amount: order.total_amount,
@@ -429,6 +499,57 @@ const Orders: React.FC = () => {
       order_date: (order as any).order_date || order.created_at?.slice(0, 10) || "",
       delivery_date: (order as any).delivery_date || "",
     });
+    // ensure customers, categories, products loaded
+    if (customers.length === 0 && !custLoading) {
+      setCustLoading(true);
+      try {
+        const raw = await customersAPI.getAll(1, 1000);
+        const list: any[] =
+          raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
+        const parsed: CustomerLite[] = list.map((c: any) => ({
+          id: Number(c.id || c.customer_id || 0),
+          name: String(c.name || c.customer_name || ""),
+          firm: String(c.firm || ""),
+        }));
+        setCustomers(parsed);
+      } catch (e: any) {
+        console.error("Failed to load customers", e);
+      } finally {
+        setCustLoading(false);
+      }
+    }
+    if (categories.length === 0) {
+      try {
+        const cats = await categoriesAPI.getAll();
+        const list: any[] = Array.isArray(cats) ? cats : (cats?.items || cats?.data || []);
+        setCategories(list.map((c: any) => ({
+          id: Number(c.id || 0),
+          name: String(c.name || ""),
+          parent_id: c.parent_id != null ? Number(c.parent_id) : null,
+        })));
+      } catch (e: any) {
+        console.error("Failed to load categories", e);
+        showAlert('error', 'Failed to load categories');
+      }
+    }
+    if (products.length === 0) {
+      try {
+        const prods = await productsAPI.getAll(1, 1000);
+        const list: any[] = prods?.items || prods?.data || (Array.isArray(prods) ? prods : []);
+        setProducts(list.map((p: any) => ({
+          id: Number(p.id || 0),
+          name: String(p.name || ""),
+          price: Number(p.mrp || p.wholesale_rate || p.price || 0),
+          mrp: Number(p.mrp || 0),
+          wholesale_rate: Number(p.wholesale_rate || 0),
+          category_id: p.category_id != null ? Number(p.category_id) : null,
+          stock: Number(p.stock || 0),
+          status: (p.status || "active") as "active" | "inactive",
+        })));
+      } catch (e: any) {
+        console.error("Failed to load products", e);
+      }
+    }
     setOpenEdit(true);
     // Fetch order items for edit
     try {
@@ -437,18 +558,53 @@ const Orders: React.FC = () => {
       // API returns {ok: true, item: {...}, items: [...]}
       if (orderData?.items && Array.isArray(orderData.items) && orderData.items.length > 0) {
         setOrderItemsView(orderData.items);
+        setEditItems(
+          orderData.items.map((item: any) => ({
+            id: item.id != null ? Number(item.id) : undefined,
+            product_id: Number(item.product_id || 0),
+            category_id: item.category_id != null ? Number(item.category_id) : 0,
+            product_name: item.product_name || item.name || `Product #${item.product_id}`,
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            subtotal: Number(item.subtotal ?? (Number(item.price || 0) * Number(item.quantity || 0))),
+          }))
+        );
       } else if (orderData?.data?.items && Array.isArray(orderData.data.items)) {
         setOrderItemsView(orderData.data.items);
+        setEditItems(
+          orderData.data.items.map((item: any) => ({
+            id: item.id != null ? Number(item.id) : undefined,
+            product_id: Number(item.product_id || 0),
+            category_id: item.category_id != null ? Number(item.category_id) : 0,
+            product_name: item.product_name || item.name || `Product #${item.product_id}`,
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            subtotal: Number(item.subtotal ?? (Number(item.price || 0) * Number(item.quantity || 0))),
+          }))
+        );
       } else if (Array.isArray(orderData)) {
         setOrderItemsView(orderData);
+        setEditItems(
+          orderData.map((item: any) => ({
+            id: item.id != null ? Number(item.id) : undefined,
+            product_id: Number(item.product_id || 0),
+            category_id: item.category_id != null ? Number(item.category_id) : 0,
+            product_name: item.product_name || item.name || `Product #${item.product_id}`,
+            quantity: Number(item.quantity || 0),
+            price: Number(item.price || 0),
+            subtotal: Number(item.subtotal ?? (Number(item.price || 0) * Number(item.quantity || 0))),
+          }))
+        );
       } else {
         console.warn("No items found in order data:", orderData);
         setOrderItemsView([]);
+        setEditItems([]);
       }
     } catch (e: any) {
       console.error("Failed to load order items", e);
       showAlert('error', 'Failed to load order items: ' + (e?.message || 'Unknown error'));
       setOrderItemsView([]);
+      setEditItems([]);
     }
   };
 
@@ -466,14 +622,36 @@ const Orders: React.FC = () => {
 
   const handleUpdateOrder = async () => {
     if (!selectedOrder) return;
-    
+
+    if (editItems.length === 0) {
+      showAlert('warning', 'Please add at least one product to the order');
+      return;
+    }
+
     try {
-      await ordersAPI.update(selectedOrder.id, editForm);
+      const payload = {
+        ...editForm,
+        order_date: editForm.order_date || null,
+        delivery_date: editForm.delivery_date || null,
+        items: editItems.map(item => ({
+          id: item.id,
+          product_id: item.product_id,
+          category_id: item.category_id || null,
+          quantity: Number(item.quantity || 1),
+          price: Number(item.price || 0),
+          subtotal: Number(item.subtotal || (item.price * item.quantity)),
+        })),
+      };
+
+      await ordersAPI.update(selectedOrder.id, payload as any);
       setOpenEdit(false);
       setSelectedOrder(null);
+      setEditItems([]);
+      setOrderItemsView([]);
       fetchOrders();
       showAlert('success', '✅ Order updated successfully!');
     } catch (e: any) {
+      console.error('Order update error:', e);
       showAlert('error', e?.message || "❌ Failed to update order");
     }
   };
@@ -908,42 +1086,109 @@ const Orders: React.FC = () => {
                 </div>
               </div>
 
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-4">Modify Products</h4>
+                <div className="grid grid-cols-12 gap-3 items-end">
+                  <div className="col-span-12 md:col-span-4">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+                    <select
+                      value={editSelectedCategoryId || ""}
+                      onChange={(e) => setEditSelectedCategoryId(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">All Categories</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-12 md:col-span-5">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Product</label>
+                    <select
+                      value={editSelectedProductId || ""}
+                      onChange={(e) => setEditSelectedProductId(Number(e.target.value))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">-- Select Product --</option>
+                      {editFilteredProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} - ₹{p.price} (MRP: ₹{p.mrp || 0}, Stock: {p.stock})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="col-span-12 md:col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editProductQuantity}
+                      onChange={(e) => setEditProductQuantity(Number(e.target.value))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="col-span-12 md:col-span-1">
+                    <button
+                      onClick={handleEditAddProduct}
+                      className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Order Items ({orderItemsView.length})</label>
-                {orderItemsView.length > 0 ? (
+                <label className="block text-sm font-medium text-gray-700 mb-2">Order Items ({editItems.length})</label>
+                {editItems.length > 0 ? (
                   <div className="bg-gray-50 rounded-lg p-4 border border-gray-200 space-y-2 max-h-60 overflow-y-auto">
-                    {orderItemsView.map((item: any, idx: number) => (
+                    {editItems.map((item, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-white p-3 rounded border">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-800">
-                            {item.product_name || item.name || `Product #${item.product_id}`}
+                            {item.product_name}
                           </p>
                           <div className="flex gap-3 mt-1 flex-wrap">
-                            {item.category_name && (
-                              <p className="text-xs text-blue-600 font-medium">Category: {item.category_name}</p>
-                            )}
-                            {item.category_id && (
+                            {item.category_id ? (
                               <p className="text-xs text-gray-500">Cat ID: {item.category_id}</p>
-                            )}
-                            {item.product_id && (
-                              <p className="text-xs text-gray-500">Product ID: {item.product_id}</p>
-                            )}
-                            {item.sku && (
-                              <p className="text-xs text-gray-500">SKU: {item.sku}</p>
-                            )}
+                            ) : null}
+                            <p className="text-xs text-gray-500">Product ID: {item.product_id}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-sm">
-                          <span className="text-gray-600">Qty: <strong className="text-gray-800">{item.quantity || 0}</strong></span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-600">Qty:</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => handleEditUpdateQuantity(idx, Number(e.target.value))}
+                              className="w-16 border border-gray-300 rounded px-2 py-1 text-sm"
+                            />
+                          </div>
                           <span className="text-gray-600">Price: <strong className="text-gray-800">₹{item.price || 0}</strong>/unit</span>
-                          <span className="font-semibold text-green-600 text-base">₹{item.subtotal || (item.price * item.quantity) || 0}</span>
+                          <span className="font-semibold text-green-600 text-base">₹{item.subtotal || 0}</span>
+                          <button
+                            onClick={() => handleEditRemoveProduct(idx)}
+                            className="text-red-600 hover:text-red-700 text-lg font-bold"
+                            title="Remove"
+                          >
+                            ×
+                          </button>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-sm">No items found for this order</p>
+                  <p className="text-gray-500 text-sm">No products added yet</p>
                 )}
+              </div>
+
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 flex justify-between items-center">
+                <span className="text-sm font-semibold text-gray-700">Calculated Total</span>
+                <span className="text-lg font-bold text-blue-600">₹{editItems.reduce((sum, item) => sum + (item.subtotal || 0), 0).toFixed(2)}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1068,8 +1313,8 @@ const Orders: React.FC = () => {
                   <div className="col-span-12 md:col-span-4">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
                     <select
-                      value={selectedCategoryId || ""}
-                      onChange={(e) => setSelectedCategoryId(e.target.value ? Number(e.target.value) : null)}
+                      value={createSelectedCategoryId || ""}
+                      onChange={(e) => setCreateSelectedCategoryId(e.target.value ? Number(e.target.value) : null)}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">All Categories</option>
@@ -1083,12 +1328,12 @@ const Orders: React.FC = () => {
                   <div className="col-span-12 md:col-span-5">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Product</label>
                     <select
-                      value={selectedProductId || ""}
-                      onChange={(e) => setSelectedProductId(Number(e.target.value))}
+                      value={createSelectedProductId || ""}
+                      onChange={(e) => setCreateSelectedProductId(Number(e.target.value))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="">-- Select Product --</option>
-                      {filteredProducts.map((p) => (
+                      {createFilteredProducts.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name} - ₹{p.price} (MRP: ₹{p.mrp || 0}, Stock: {p.stock})
                         </option>
@@ -1100,14 +1345,14 @@ const Orders: React.FC = () => {
                 <input
                   type="number"
                       min="1"
-                      value={productQuantity}
-                      onChange={(e) => setProductQuantity(Number(e.target.value))}
+                      value={createProductQuantity}
+                      onChange={(e) => setCreateProductQuantity(Number(e.target.value))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
                   <div className="col-span-12 md:col-span-1">
                     <button
-                      onClick={handleAddProduct}
+                      onClick={handleCreateAddProduct}
                       className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium"
                     >
                       Add
@@ -1117,11 +1362,11 @@ const Orders: React.FC = () => {
               </div>
 
               {/* Order Items List */}
-              {orderItems.length > 0 && (
+              {createItems.length > 0 && (
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Order Items</h4>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {orderItems.map((item, idx) => (
+                    {createItems.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
                         <div className="flex-1">
                           <p className="text-sm font-medium text-gray-800">{item.product_name}</p>
@@ -1134,7 +1379,7 @@ const Orders: React.FC = () => {
                               type="number"
                               min="1"
                               value={item.quantity}
-                              onChange={(e) => handleUpdateQuantity(idx, Number(e.target.value))}
+                              onChange={(e) => handleCreateUpdateQuantity(idx, Number(e.target.value))}
                               className="w-16 border border-gray-300 rounded px-2 py-1 text-sm"
                             />
                           </div>
@@ -1142,7 +1387,7 @@ const Orders: React.FC = () => {
                             ₹{item.subtotal}
                           </span>
                           <button
-                            onClick={() => handleRemoveProduct(idx)}
+                            onClick={() => handleCreateRemoveProduct(idx)}
                             className="text-red-600 hover:text-red-700 text-lg font-bold"
                             title="Remove"
                           >
@@ -1261,7 +1506,7 @@ const Orders: React.FC = () => {
                     showAlert('warning', 'Please select a customer');
                     return;
                   }
-                  if (orderItems.length === 0) {
+                  if (createItems.length === 0) {
                     showAlert('warning', 'Please add at least one product to the order');
                     return;
                   }
@@ -1273,7 +1518,7 @@ const Orders: React.FC = () => {
                       ...createForm,
                       order_date: createForm.order_date || null,
                       delivery_date: createForm.delivery_date || null,
-                      items: orderItems.map(item => ({
+                      items: createItems.map(item => ({
                         product_id: item.product_id,
                         category_id: item.category_id || null,
                         quantity: Number(item.quantity || 1),
@@ -1304,7 +1549,7 @@ const Orders: React.FC = () => {
                       order_date: "",
                       delivery_date: "",
                     });
-                    setOrderItems([]);
+                    setCreateItems([]);
                   } catch (e: any) {
                     console.error("Order creation error:", e); // Debug
                     showAlert('error', e?.message || "❌ Failed to create order");

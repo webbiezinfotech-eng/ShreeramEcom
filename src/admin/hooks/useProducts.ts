@@ -49,6 +49,7 @@ export const useProducts = (page = 1, limit = 20, search = "") => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const [currentPage, setCurrentPage] = useState(page);
 
   // 🔹 GET All Products
@@ -60,6 +61,7 @@ export const useProducts = (page = 1, limit = 20, search = "") => {
       const list = pickArray(res).map(normalize);
       const total = num(res?.total) || num(res?.count) || list.length;
       setProducts(list);
+      setTotalItems(total);
       setTotalPages(Math.max(1, Math.ceil(total / limit)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch products");
@@ -102,6 +104,7 @@ export const useProducts = (page = 1, limit = 20, search = "") => {
     loading,
     error,
     totalPages,
+    totalItems,
     currentPage,
     setCurrentPage,
     fetchProducts,

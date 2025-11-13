@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useProducts, Product } from "../../hooks/useProducts";
-import { categoriesAPI } from "../../services/api";
+import { categoriesAPI, productsAPI } from "../../services/api";
 import Alert from "../../components/Alert";
 import * as XLSX from "xlsx";
 
@@ -21,9 +21,24 @@ const pickArray = (res: any): any[] => {
 
 const ProductList: React.FC = () => {
   const navigate = useNavigate();
-  const { products, loading, error, deleteProduct, updateProduct, fetchProducts, createProduct } = useProducts();
-
+  const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+
+  const pageSize = 20;
+
+  const {
+    products,
+    loading,
+    error,
+    deleteProduct,
+    updateProduct,
+    fetchProducts,
+    createProduct,
+    totalPages,
+    totalItems,
+    currentPage,
+    setCurrentPage,
+  } = useProducts(1, pageSize, searchTerm);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   
@@ -63,16 +78,35 @@ const ProductList: React.FC = () => {
     })();
   }, []);
 
-  // search filter
-  const filteredProducts = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(
-      (p) =>
-        (p.name || "").toLowerCase().includes(q) ||
-        (p.sku || "").toLowerCase().includes(q)
-    );
-  }, [products, searchTerm]);
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      const next = searchInput.trim();
+
+      setCurrentPage((prev) => (prev === 1 ? prev : 1));
+      setSearchTerm((prev) => (prev === next ? prev : next));
+    }, 400);
+
+    return () => clearTimeout(handler);
+  }, [searchInput, setCurrentPage, setSearchTerm]);
+
+  const paginationRange = useMemo(() => {
+    const pages: number[] = [];
+    const maxButtons = 5;
+    let start = Math.max(1, currentPage - 2);
+    let end = Math.min(totalPages, start + maxButtons - 1);
+    start = Math.max(1, end - maxButtons + 1);
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  }, [currentPage, totalPages]);
+
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endItem =
+    totalItems === 0 ? 0 : Math.min((currentPage - 1) * pageSize + products.length, totalItems);
+  const showPagination = totalItems > 0;
 
   // Export to Excel (.xlsx)
   const exportExcel = () => {
@@ -197,27 +231,39 @@ const ProductList: React.FC = () => {
         return;
       }
 
-      // Alternative approach: Create products one by one (more reliable)
-      let successCount = 0;
-      let errorCount = 0;
-      const errors: string[] = [];
-
       showAlert('info', `⏳ Importing ${productsToImport.length} products, please wait...`);
 
-      for (let i = 0; i < productsToImport.length; i++) {
-        try {
-          await createProduct(productsToImport[i]);
-          successCount++;
-          
-          // Update progress every 5 products
-          if ((i + 1) % 5 === 0 || i === productsToImport.length - 1) {
-            showAlert('info', `⏳ Imported ${successCount}/${productsToImport.length} products...`);
+      let successCount = 0;
+      let totalCount = productsToImport.length;
+      let resultErrors: string[] = [];
+
+      try {
+        const result = await productsAPI.bulkImport(productsToImport);
+        successCount = Number(result?.imported || 0);
+        totalCount = Number(result?.total || productsToImport.length);
+        resultErrors = Array.isArray(result?.errors) ? result.errors.filter(Boolean) : [];
+      } catch (bulkError: any) {
+        console.warn('Bulk import endpoint failed, falling back to single create calls.', bulkError);
+        resultErrors = [];
+
+        for (let i = 0; i < productsToImport.length; i++) {
+          try {
+            await createProduct(productsToImport[i]);
+            successCount++;
+
+            if ((i + 1) % 5 === 0 || i === productsToImport.length - 1) {
+              showAlert('info', `⏳ Imported ${successCount}/${productsToImport.length} products...`);
+            }
+          } catch (rowError: any) {
+            const message = rowError?.message || 'Failed to import';
+            resultErrors.push(`Row ${i + 2}: ${message}`);
+            console.error(`Failed to import product at row ${i + 1}:`, rowError);
           }
-        } catch (error: any) {
-          errorCount++;
-          errors.push(`Row ${i + 2}: ${error.message || 'Failed to import'}`);
-          console.error(`Failed to import product ${i + 1}:`, error);
         }
+      }
+
+      if (resultErrors.length > 0) {
+        console.error('Import errors:', resultErrors);
       }
 
       // Refresh products list
@@ -225,18 +271,16 @@ const ProductList: React.FC = () => {
 
       // Show final result
       if (successCount > 0) {
-        const message = errorCount > 0 
-          ? `✅ Successfully imported ${successCount} products! ${errorCount} failed.`
+        const failedCount = Math.max(totalCount - successCount, resultErrors.length);
+        const message = failedCount > 0
+          ? `✅ Imported ${successCount}/${totalCount} products. ${failedCount} failed.`
           : `✅ Successfully imported ${successCount} products!`;
         showAlert('success', message);
       } else {
-        showAlert('error', `❌ Failed to import all products. ${errors.slice(0, 3).join('; ')}`);
+        const errorPreview = resultErrors.slice(0, 3).join('; ') || 'Unknown error';
+        showAlert('error', `❌ Failed to import products. ${errorPreview}`);
       }
-
-      // Log all errors to console
-      if (errors.length > 0) {
-        console.error('Import errors:', errors);
-      }
+      
 
     } catch (error: any) {
       console.error('Bulk upload error:', error);
@@ -298,8 +342,8 @@ const ProductList: React.FC = () => {
             <input
               type="text"
               placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
             />
             <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
@@ -348,10 +392,10 @@ const ProductList: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredProducts.map((product, index) => (
+                {products.map((product, index) => (
                   <tr key={product.id} className="border-b hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-500 font-medium">
-                      {index + 1}
+                      {startItem + index}
                     </td>
                     <td className="px-4 py-3">
                       <div>
@@ -413,7 +457,7 @@ const ProductList: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                {filteredProducts.length === 0 && (
+                {products.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
                       No products found
@@ -425,6 +469,49 @@ const ProductList: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showPagination && (
+        <div className="mt-4 bg-white rounded-xl shadow-lg border border-gray-100">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 px-4 py-3 text-sm text-gray-600">
+            <div>
+              {totalItems === 0
+                ? "Showing 0 products"
+                : `Showing ${startItem}-${endItem} of ${totalItems} products`}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-1">
+                {paginationRange.map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`px-3 py-1.5 rounded border transition-colors ${
+                      page === currentPage
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- Modals --- */}
       {editingProduct && (

@@ -156,6 +156,9 @@ try {
     $id = (int)$_GET['id'];
     $b = read_json_body();
 
+    $items = isset($b['items']) && is_array($b['items']) ? $b['items'] : null;
+    unset($b['items']);
+
     // normalize + build update list
     $sets = [];
     $params = [':id'=>$id];
@@ -186,11 +189,57 @@ try {
 
     if (empty($sets)) { echo json_encode(['ok'=>true,'updated'=>0]); exit; }
 
-    $sql = "UPDATE orders SET ".implode(', ', $sets)." WHERE id = :id";
-    $st = $pdo->prepare($sql);
-    $st->execute($params);
+    $itemsSaved = 0;
 
-    echo json_encode(['ok'=>true,'updated'=>$st->rowCount()], JSON_UNESCAPED_UNICODE);
+    try {
+      $pdo->beginTransaction();
+
+      $sql = "UPDATE orders SET ".implode(', ', $sets)." WHERE id = :id";
+      $st = $pdo->prepare($sql);
+      $st->execute($params);
+
+      if ($items !== null) {
+        $del = $pdo->prepare("DELETE FROM order_items WHERE order_id = :id");
+        $del->execute([':id' => $id]);
+
+        $ins1 = $pdo->prepare("INSERT INTO order_items (order_id, product_id, category_id, quantity, price, created_at) VALUES (:order_id, :product_id, :category_id, :quantity, :price, NOW())");
+        $ins2 = $pdo->prepare("INSERT INTO order_items (order_id, product_id, quantity, price, created_at) VALUES (:order_id, :product_id, :quantity, :price, NOW())");
+
+        foreach ($items as $item) {
+          $product_id = isset($item['product_id']) ? (int)$item['product_id'] : 0;
+          if ($product_id <= 0) continue;
+          $category_id = isset($item['category_id']) && $item['category_id'] !== '' ? (int)$item['category_id'] : null;
+          $quantity = isset($item['quantity']) ? max(1, (int)$item['quantity']) : 1;
+          $price = isset($item['price']) ? (float)$item['price'] : 0.0;
+
+          if ($category_id !== null) {
+            $ins1->execute([
+              ':order_id' => $id,
+              ':product_id' => $product_id,
+              ':category_id' => $category_id,
+              ':quantity' => $quantity,
+              ':price' => $price,
+            ]);
+            $itemsSaved += $ins1->rowCount();
+          } else {
+            $ins2->execute([
+              ':order_id' => $id,
+              ':product_id' => $product_id,
+              ':quantity' => $quantity,
+              ':price' => $price,
+            ]);
+            $itemsSaved += $ins2->rowCount();
+          }
+        }
+      }
+
+      $pdo->commit();
+    } catch (Throwable $tx) {
+      $pdo->rollBack();
+      throw $tx;
+    }
+
+    echo json_encode(['ok'=>true,'updated'=>$st->rowCount(),'items_saved'=>$itemsSaved], JSON_UNESCAPED_UNICODE);
     exit;
   }
 
