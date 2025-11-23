@@ -16,13 +16,40 @@ function Cart() {
   // Load cart items when component mounts
   useEffect(() => {
     loadCartItems();
-  }, []);
+  }, [loadCartItems]);
 
   const updateQuantity = async (id, change) => {
-    const item = cartItems.find(item => item.id === id);
-    if (item) {
-      const newQuantity = Math.max(1, item.quantity + change);
-      await updateItemQuantity(id, newQuantity);
+    try {
+      const item = cartItems.find(item => (item.id === id || item.cart_id === id));
+      if (!item) {
+        // Item not found
+        return;
+      }
+      
+      const currentQuantity = parseInt(item.quantity || 1);
+      const newQuantity = Math.max(1, currentQuantity + change);
+      
+      if (newQuantity !== currentQuantity) {
+        // API expects the cart item ID (from cart table), which is stored as 'id' in our item
+        // The cart item ID is the primary key from the cart table
+        // Use the cart item ID (from cart table)
+        const itemId = item.id ? parseInt(item.id) : null;
+        if (!itemId || isNaN(itemId)) {
+          // Item ID not found
+          return;
+        }
+        
+        const result = await updateItemQuantity(itemId, newQuantity);
+        if (result && result.success) {
+          // Cart will reload automatically via context
+        } else {
+          // Failed to update quantity
+          // Still try to reload in case of partial success
+          await loadCartItems();
+        }
+      }
+    } catch (error) {
+      // Error updating quantity
     }
   };
 
@@ -31,20 +58,15 @@ function Cart() {
   };
 
   const getSubtotal = () => {
-    return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
-  };
-
-  const getTotalSavings = () => {
-    return cartItems.reduce((total, item) => total + ((item.oldPrice || item.price) - item.price) * item.quantity, 0);
-  };
-
-  const getShipping = () => {
-    const subtotal = getSubtotal();
-    return subtotal >= 5000 ? 0 : 200; // Free shipping over ₹5,000
+    return cartItems.reduce((total, item) => {
+      const price = parseFloat(item.price || 0);
+      const quantity = parseInt(item.quantity || 1);
+      return total + (price * quantity);
+    }, 0);
   };
 
   const getTotal = () => {
-    return getSubtotal() + getShipping();
+    return getSubtotal();
   };
 
   if (loading) {
@@ -122,11 +144,21 @@ function Cart() {
                   <div key={item.id} className="flex flex-col sm:flex-row gap-4 p-5 border border-gray-100 rounded-xl hover:shadow-sm transition-all duration-200 bg-gray-50/50">
                     {/* Product Image */}
                     <div className="flex-shrink-0">
-                      <img 
-                        src={item.image || `https://via.placeholder.com/100x100?text=${item.name}`}
-                        alt={item.name}
-                        className="w-20 h-20 object-cover rounded-lg"
-                      />
+                      {item.image || item.image_url ? (
+                        <img 
+                          src={item.image || item.image_url}
+                          alt={item.name || 'Product'}
+                          className="w-20 h-20 object-cover rounded-lg"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            const fallback = e.target.nextElementSibling;
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`${item.image || item.image_url ? 'hidden' : ''} w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center`}>
+                        <span className="text-gray-400 text-xl font-bold">{(item.name || 'Product').charAt(0)}</span>
+                      </div>
                     </div>
 
                     {/* Product Details */}
@@ -143,24 +175,14 @@ function Cart() {
                           {/* Price */}
                           <div className="flex items-center gap-2 mb-3">
                             <span className="text-lg font-bold text-[#002D7A]">
-                              ₹{item.price.toFixed(2)}
+                              ₹{parseFloat(item.price || 0).toFixed(2)}
                             </span>
-                            {item.oldPrice && (
-                              <>
-                                <span className="text-gray-400 line-through text-sm">
-                                  ₹{item.oldPrice.toFixed(2)}
-                                </span>
-                                <span className="text-green-600 text-xs font-medium">
-                                  Save ₹{(item.oldPrice - item.price).toFixed(2)}
-                                </span>
-                              </>
-                            )}
                           </div>
                         </div>
 
                         {/* Remove Button */}
                         <button
-                          onClick={() => removeItem(item.id)}
+                          onClick={() => removeItem(item.cart_id || item.id)}
                           className="text-red-500 hover:text-red-700 transition-colors p-2"
                           title="Remove item"
                         >
@@ -173,9 +195,13 @@ function Cart() {
                         <span className="text-sm font-medium text-gray-600">Quantity:</span>
                         <div className="flex items-center border border-gray-200 rounded-lg bg-white">
                           <button
-                            onClick={() => updateQuantity(item.id, -1)}
-                            className="p-2 hover:bg-gray-50 transition-colors rounded-l-lg"
-                            disabled={item.quantity <= 1}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              updateQuantity(item.cart_id || item.id, -1);
+                            }}
+                            className="p-2 hover:bg-gray-50 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={parseInt(item.quantity || 1) <= 1}
+                            type="button"
                           >
                             <FaMinus className="text-gray-500" size={10} />
                           </button>
@@ -183,14 +209,18 @@ function Cart() {
                             {item.quantity}
                           </span>
                           <button
-                            onClick={() => updateQuantity(item.id, 1)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              updateQuantity(item.cart_id || item.id, 1);
+                            }}
                             className="p-2 hover:bg-gray-50 transition-colors rounded-r-lg"
+                            type="button"
                           >
                             <FaPlus className="text-gray-500" size={10} />
                           </button>
                         </div>
                         <span className="text-sm font-semibold text-[#002D7A]">
-                          Total: ₹{(item.price * item.quantity).toFixed(2)}
+                          Total: ₹{(parseFloat(item.price || 0) * parseInt(item.quantity || 1)).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -212,33 +242,6 @@ function Cart() {
                   <span className="font-semibold text-gray-800">₹{getSubtotal().toFixed(2)}</span>
                 </div>
 
-                {/* Savings */}
-                {getTotalSavings() > 0 && (
-                  <div className="flex justify-between text-green-600 py-2">
-                    <span>Total Savings</span>
-                    <span className="font-semibold">-₹{getTotalSavings().toFixed(2)}</span>
-                  </div>
-                )}
-
-                {/* Shipping */}
-                <div className="flex justify-between py-2">
-                  <span className="text-gray-600">Shipping</span>
-                  <span className="font-semibold">
-                    {getShipping() === 0 ? (
-                      <span className="text-green-600">FREE</span>
-                    ) : (
-                      `₹${getShipping().toFixed(2)}`
-                    )}
-                  </span>
-                </div>
-
-                {/* Shipping Notice */}
-                {getShipping() > 0 && (
-                  <div className="text-sm text-gray-500 bg-blue-50 p-3 rounded-lg">
-                    Add ₹{(5000 - getSubtotal()).toFixed(2)} more for free shipping!
-                  </div>
-                )}
-
                 {/* Divider */}
                 <div className="border-t border-gray-200 my-4"></div>
 
@@ -248,7 +251,7 @@ function Cart() {
                   <span className="text-[#002D7A]">₹{getTotal().toFixed(2)}</span>
                 </div>
 
-                {/* Checkout Button (enforce ₹5,000 minimum) */}
+                {/* Checkout Button */}
                 {getSubtotal() < 5000 ? (
                   <>
                     <button disabled className="w-full bg-gray-200 text-gray-500 py-4 px-4 rounded-xl font-semibold cursor-not-allowed flex items-center justify-center gap-2 mt-6">
@@ -287,13 +290,6 @@ function Cart() {
                 </div>
               </div>
 
-              {/* Trust Badges */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="text-center">
-                  <div className="font-semibold text-green-600 mb-1">✓ Free Shipping</div>
-                  <div>On orders over ₹5,000</div>
-                </div>
-              </div>
             </div>
           </div>
         </div>

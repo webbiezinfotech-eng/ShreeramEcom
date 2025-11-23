@@ -24,7 +24,8 @@ function json_out($data, int $code = 200): void {
 
 // API key check (skip for public endpoints if you add any later)
 function require_api_key(): void {
-    $key = $_SERVER['HTTP_X_API_KEY'] ?? ($_GET['api_key'] ?? '');
+    // Check multiple sources: Header, GET params, POST data (for FormData)
+    $key = $_SERVER['HTTP_X_API_KEY'] ?? ($_GET['api_key'] ?? ($_POST['api_key'] ?? ''));
     if (!$key || !hash_equals(API_KEY, $key)) {
         json_out(['error' => 'unauthorized'], 401);
     }

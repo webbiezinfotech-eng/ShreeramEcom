@@ -5,6 +5,8 @@ import {
   RecentCustomer,
   getTopProducts,
   TopProduct,
+  getMessages,
+  Message,
 } from "../services/api";
 import { useProducts } from "../hooks/useProducts";
 import { useOrders } from "../hooks/useOrders";
@@ -103,6 +105,10 @@ const Dashboard: React.FC = () => {
   const [tpLoading, setTpLoading] = useState(true);
   const [tpError, setTpError] = useState<string | null>(null);
 
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [msgLoading, setMsgLoading] = useState(true);
+  const [msgError, setMsgError] = useState<string | null>(null);
+
   useEffect(() => {
     setRcLoading(true);
     getRecentCustomers(5)
@@ -116,6 +122,12 @@ const Dashboard: React.FC = () => {
       .then(setTopProducts)
       .catch((e) => setTpError(e?.message || "Failed"))
       .finally(() => setTpLoading(false));
+
+    setMsgLoading(true);
+    getMessages(5, 'unread')
+      .then(setMessages)
+      .catch((e) => setMsgError(e?.message || "Failed"))
+      .finally(() => setMsgLoading(false));
   }, []);
 
   // ---------- KPI metrics (dynamic) ----------
@@ -286,6 +298,73 @@ const Dashboard: React.FC = () => {
                       </td>
                     </tr>
                   )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Messages (dynamic) */}
+        <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100 w-full">
+          <h2 className="text-lg sm:text-xl font-semibold mb-4 text-gray-800 flex items-center">
+            <span className="w-2 h-8 bg-orange-500 rounded-full mr-3"></span>
+            Recent Messages
+          </h2>
+
+          {msgLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-16 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : msgError ? (
+            <p className="text-sm text-red-600">Error: {msgError}</p>
+          ) : messages.length === 0 ? (
+            <p className="text-sm text-gray-500 py-4">No new messages</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="professional-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Contact</th>
+                    <th>Subject</th>
+                    <th>Message</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {messages.slice(0, 5).map((msg) => (
+                    <tr key={msg.id}>
+                      <td className="font-medium text-gray-800">
+                        {msg.customer_name || msg.name}
+                        {msg.customer_firm && (
+                          <div className="text-xs text-gray-500">{msg.customer_firm}</div>
+                        )}
+                      </td>
+                      <td className="text-gray-600 text-sm">
+                        <div>{msg.customer_email || msg.email}</div>
+                        <div className="text-xs">{msg.customer_phone || msg.phone}</div>
+                      </td>
+                      <td className="text-gray-700">{msg.subject || '-'}</td>
+                      <td className="text-gray-600 text-sm max-w-xs truncate">{msg.message}</td>
+                      <td className="text-gray-500 text-sm">
+                        {new Date(msg.created_at).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${
+                            msg.status === 'unread'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}
+                        >
+                          {msg.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

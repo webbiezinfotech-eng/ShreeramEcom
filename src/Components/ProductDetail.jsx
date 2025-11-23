@@ -16,18 +16,21 @@ import {
 } from "react-icons/fa";
 import { getProductById } from "../services/api";
 import { useCart } from "../contexts/CartContext";
+import { useWishlist } from "../contexts/WishlistContext";
+import LoginPrompt from "./LoginPrompt";
 
 function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addItemToCart } = useCart();
+  const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [isWishlisted, setIsWishlisted] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
   // Fetch product details
   useEffect(() => {
@@ -42,7 +45,7 @@ function ProductDetail() {
         }
       } catch (err) {
         setError("Failed to load product");
-        console.error("Error fetching product:", err);
+        // Silently handle error
       } finally {
         setLoading(false);
       }
@@ -52,6 +55,9 @@ function ProductDetail() {
       fetchProduct();
     }
   }, [id]);
+
+  // Check if product is in wishlist
+  const isWishlisted = product ? isInWishlist(product.id) : false;
 
   // Handle quantity changes
   const handleQuantityChange = (action) => {
@@ -70,14 +76,23 @@ function ProductDetail() {
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
       } else {
-        alert('Failed to add to cart: ' + result.error);
+        // Handle error silently or show toast
       }
     }
   };
 
-  // Add to wishlist
-  const handleWishlist = () => {
-    setIsWishlisted(!isWishlisted);
+  // Add/Remove from wishlist
+  const handleWishlist = async () => {
+    if (!product) return;
+    
+    if (isWishlisted) {
+      await removeFromWishlist(null, product.id);
+    } else {
+      const result = await addToWishlist(product.id);
+      if (result.requiresLogin) {
+        setShowLoginPrompt(true);
+      }
+    }
   };
 
   // Share product
@@ -91,7 +106,7 @@ function ProductDetail() {
     } else {
       // Fallback: copy to clipboard
       navigator.clipboard.writeText(window.location.href);
-      alert("Product link copied to clipboard!");
+      // Link copied - could show toast if needed
     }
   };
 
@@ -131,11 +146,7 @@ function ProductDetail() {
     );
   }
 
-  const productImages = [
-    product.image || `https://via.placeholder.com/600x400?text=${product.name}`,
-    `https://via.placeholder.com/600x400?text=${product.name}+2`,
-    `https://via.placeholder.com/600x400?text=${product.name}+3`
-  ];
+  const productImages = product.image ? [product.image] : [];
 
   const discountPercentage = product.oldPrice 
     ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
@@ -375,6 +386,13 @@ function ProductDetail() {
           </div>
         </div>
       </div>
+
+      {/* Login Prompt */}
+      <LoginPrompt
+        isOpen={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        message="Please login first to add products to your wishlist"
+      />
     </div>
   );
 }

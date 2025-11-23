@@ -31,7 +31,37 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
   const body = ct.includes("application/json") ? await res.json() : await res.text();
 
   if (!res.ok) {
-    throw new Error(typeof body === "string" ? body : JSON.stringify(body));
+    // Extract error message from response
+    let errorMessage = "An error occurred";
+    
+    if (typeof body === "object" && body !== null) {
+      // If body is already parsed JSON
+      if (body.error) {
+        errorMessage = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
+      } else if (body.message) {
+        errorMessage = body.message;
+      } else {
+        errorMessage = JSON.stringify(body);
+      }
+    } else if (typeof body === "string") {
+      // Try to parse if it's a JSON string
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed.error) {
+          errorMessage = typeof parsed.error === "string" ? parsed.error : parsed.error.message || errorMessage;
+        } else if (parsed.message) {
+          errorMessage = parsed.message;
+        }
+      } catch {
+        errorMessage = body || errorMessage;
+      }
+    }
+    
+    // Create error object with status and message
+    const error: any = new Error(errorMessage);
+    error.status = res.status;
+    error.response = body;
+    throw error;
   }
   return body;
 }
@@ -104,6 +134,23 @@ export type TopProduct = {
   revenue: number;
 };
 
+export type Message = {
+  id: number;
+  customer_id: number | null;
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  status: 'read' | 'unread';
+  created_at: string;
+  updated_at: string | null;
+  customer_name?: string;
+  customer_firm?: string;
+  customer_email?: string;
+  customer_phone?: string;
+};
+
 // ---------- API: Products ----------
 export async function getProducts(limit = 1000, page = 1): Promise<Product[]> {
   const raw = await apiCall(`endpoints/products.php?limit=${limit}&page=${page}`);
@@ -135,11 +182,21 @@ export const productsAPI = {
       body: data instanceof FormData ? data : JSON.stringify(data),
     }),
 
-  update: (id: number, data: any) =>
-    apiCall(`endpoints/products.php?id=${id}`, {
+  update: (id: number, data: any) => {
+    const isFormData = data instanceof FormData;
+    // For FormData, use POST with _method override to ensure $_FILES works
+    if (isFormData) {
+      data.append('_method', 'PUT');
+      return apiCall(`endpoints/products.php?id=${id}`, {
+        method: "POST",
+        body: data,
+      });
+    }
+    return apiCall(`endpoints/products.php?id=${id}`, {
       method: "PUT",
-      body: data instanceof FormData ? data : JSON.stringify(data),
-    }),
+      body: JSON.stringify(data),
+    });
+  },
 
   delete: (id: number) => apiCall(`endpoints/products.php?id=${id}`, { method: "DELETE" }),
 
@@ -225,6 +282,8 @@ export const categoriesAPI = {
     apiCall("endpoints/categories.php", { method: "POST", body: JSON.stringify(data) }),
   update: (id: number, data: any) =>
     apiCall(`endpoints/categories.php?id=${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: number) =>
+    apiCall(`endpoints/categories.php?id=${id}`, { method: "DELETE" }),
 };
 
 // ---------- API: Upload ----------
@@ -284,6 +343,31 @@ export const customersAPI = {
 };
 
 
+// ---------- API: Admins ----------
+export type Admin = {
+  id: number;
+  name: string;
+  email: string;
+  created_at?: string;
+};
+
+export const adminsAPI = {
+  login: (email: string, password: string) => {
+    const params = new URLSearchParams({
+      email,
+      password,
+    });
+    return apiCall(`endpoints/admins.php?${params.toString()}`);
+  },
+  getAll: () => apiCall("endpoints/admins.php"),
+  getById: (id: number) => apiCall(`endpoints/admins.php?id=${id}`),
+  create: (data: { name: string; email: string; password: string }) =>
+    apiCall("endpoints/admins.php", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: number, data: Partial<{ name: string; email: string; password: string }>) =>
+    apiCall(`endpoints/admins.php?id=${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  delete: (id: number) => apiCall(`endpoints/admins.php?id=${id}`, { method: "DELETE" }),
+};
+
 // ---------- API: Dashboard widgets ----------
 export async function getRecentCustomers(limit = 5): Promise<RecentCustomer[]> {
   const raw = await apiCall(`endpoints/dashboard_recent_customers.php?limit=${limit}`);
@@ -308,6 +392,36 @@ export async function getTopProducts(limit = 5, days = 30): Promise<TopProduct[]
     units: toNum(t.units),
     revenue: toNum(t.revenue),
   })) as TopProduct[];
+}
+
+export async function getMessages(limit = 10, status?: 'read' | 'unread'): Promise<Message[]> {
+  let url = `endpoints/messages.php?limit=${limit}`;
+  if (status) url += `&status=${status}`;
+  const raw = await apiCall(url);
+  const list = arrOf(raw) || arrOf((raw as any)?.data);
+  return list.map((m: any) => ({
+    id: toNum(m.id),
+    customer_id: m.customer_id ? toNum(m.customer_id) : null,
+    name: String(m.name ?? ""),
+    email: String(m.email ?? ""),
+    phone: String(m.phone ?? ""),
+    subject: String(m.subject ?? ""),
+    message: String(m.message ?? ""),
+    status: (m.status === 'read' ? 'read' : 'unread') as 'read' | 'unread',
+    created_at: String(m.created_at ?? ""),
+    updated_at: m.updated_at ? String(m.updated_at) : null,
+    customer_name: m.customer_name ? String(m.customer_name) : undefined,
+    customer_firm: m.customer_firm ? String(m.customer_firm) : undefined,
+    customer_email: m.customer_email ? String(m.customer_email) : undefined,
+    customer_phone: m.customer_phone ? String(m.customer_phone) : undefined,
+  })) as Message[];
+}
+
+export async function updateMessageStatus(id: number, status: 'read' | 'unread'): Promise<void> {
+  await apiCall(`endpoints/messages.php?id=${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
 }
 
 // ---------- default export (optional convenience) ----------

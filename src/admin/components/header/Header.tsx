@@ -1,6 +1,7 @@
 
 import { ThemeToggleButton } from "../common/ThemeToggleButton";
 import UserDropdown from "./UserDropdown";
+import srlogo from "../../../assets/srlogo.png";
 
 // Define the interface for the props
 interface HeaderProps {
@@ -56,7 +57,7 @@ const Header: React.FC<HeaderProps> = ({ onClick, onToggle }) => {
 
           <div className="lg:hidden">
             <img
-              src="/images/logo/logo.jpg"
+              src={srlogo}
               alt="Shreeram Stationery"
               className="h-8 w-auto"
             />

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { FaMapMarkerAlt, FaPhone, FaEnvelope, FaClock, FaPaperPlane, FaUser, FaComment } from "react-icons/fa";
+import { submitMessage } from "../services/api";
+import { getLoggedInCustomerId } from "../services/api";
 
 function Contact() {
   const [formData, setFormData] = useState({
@@ -58,20 +60,35 @@ function Contact() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (validateForm()) {
-      // Handle form submission
-      console.log("Contact form submitted:", formData);
-      setIsSubmitted(true);
-      // Reset form
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        subject: "",
-        message: "",
-      });
+      try {
+        const customerId = getLoggedInCustomerId();
+        const messageData = {
+          ...formData,
+          customer_id: customerId ? parseInt(customerId) : null
+        };
+
+        const result = await submitMessage(messageData);
+        
+        if (result.ok) {
+          setIsSubmitted(true);
+          // Reset form
+          setFormData({
+            name: "",
+            email: "",
+            phone: "",
+            subject: "",
+            message: "",
+          });
+        } else {
+          setErrors({ submit: result.error || "Failed to send message. Please try again." });
+        }
+      } catch (error) {
+        // Silently handle error
+        setErrors({ submit: "An error occurred. Please try again." });
+      }
     }
   };
 
@@ -174,6 +191,12 @@ function Contact() {
                     <FaPaperPlane className="mr-2" />
                     Thank you! Your message has been sent successfully. We'll get back to you soon.
                   </div>
+                </div>
+              )}
+
+              {errors.submit && (
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+                  {errors.submit}
                 </div>
               )}
 

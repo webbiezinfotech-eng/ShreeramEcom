@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { FaEye, FaEyeSlash, FaUser, FaLock, FaEnvelope, FaPhone, FaBuilding } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { registerCustomer } from "../services/api";
 
 function Register() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
+    fullName: "",
     email: "",
     phone: "",
     company: "",
@@ -16,6 +17,8 @@ function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -35,12 +38,10 @@ function Register() {
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.firstName.trim()) {
-      newErrors.firstName = "First name is required";
-    }
-
-    if (!formData.lastName.trim()) {
-      newErrors.lastName = "Last name is required";
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = "Full name is required";
+    } else if (formData.fullName.trim().length < 2) {
+      newErrors.fullName = "Full name must be at least 2 characters";
     }
 
     if (!formData.email) {
@@ -81,94 +82,91 @@ function Register() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError("");
+    
     if (validateForm()) {
-      // Handle registration logic here
-      console.log("Registration data:", formData);
-      // Redirect to login page or dashboard
+      setLoading(true);
+      try {
+        const result = await registerCustomer({
+          ...formData,
+          name: formData.fullName
+        });
+        
+        if (result.ok && result.customer) {
+          // Trigger storage event to sync cart context
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'customer_id',
+            newValue: result.customer.id.toString()
+          }));
+          // Also trigger a custom event
+          window.dispatchEvent(new CustomEvent('customerLogin', { detail: result.customer }));
+          // Registration successful - redirect to profile or home
+          navigate("/profile");
+        } else {
+          setSubmitError(result.error || "Registration failed. Please try again.");
+        }
+      } catch (error) {
+        setSubmitError("An error occurred. Please try again.");
+        // Silently handle error
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full space-y-8">
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center py-4 sm:py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl w-full space-y-6 sm:space-y-8">
         {/* Header */}
         <div className="text-center">
-          <h2 className="mt-6 text-3xl font-bold text-[#002D7A]">
+          <h2 className="mt-2 sm:mt-6 text-2xl sm:text-3xl font-bold text-[#002D7A]">
             Create Your Account
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-gray-600">
             Join Shreeram Stationery for wholesale benefits
           </p>
         </div>
 
         {/* Registration Form */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-8">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* Name Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaUser className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    id="firstName"
-                    name="firstName"
-                    type="text"
-                    autoComplete="given-name"
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
-                      errors.firstName ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter your first name"
-                  />
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-gray-200 p-4 sm:p-6 lg:p-8">
+          <form className="space-y-4 sm:space-y-6" onSubmit={handleSubmit}>
+            {/* Full Name Field */}
+            <div>
+              <label htmlFor="fullName" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Full Name *
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <FaUser className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                 </div>
-                {errors.firstName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>
-                )}
+                <input
+                  id="fullName"
+                  name="fullName"
+                  type="text"
+                  autoComplete="name"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                    errors.fullName ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Enter your full name"
+                />
               </div>
-
-              <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
-                  Last Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaUser className="h-5 w-5 text-gray-400" />
-                  </div>
-                  <input
-                    id="lastName"
-                    name="lastName"
-                    type="text"
-                    autoComplete="family-name"
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
-                      errors.lastName ? "border-red-500" : "border-gray-300"
-                    }`}
-                    placeholder="Enter your last name"
-                  />
-                </div>
-                {errors.lastName && (
-                  <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
-                )}
-              </div>
+              {errors.fullName && (
+                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.fullName}</p>
+              )}
             </div>
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                 Email Address
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FaEnvelope className="h-5 w-5 text-gray-400" />
+                  <FaEnvelope className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                 </div>
                 <input
                   id="email"
@@ -177,26 +175,26 @@ function Register() {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                  className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                     errors.email ? "border-red-500" : "border-gray-300"
                   }`}
                   placeholder="Enter your email address"
                 />
               </div>
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.email}</p>
               )}
             </div>
 
             {/* Phone and Company Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="phone" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                   Phone Number
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaPhone className="h-5 w-5 text-gray-400" />
+                    <FaPhone className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                   </div>
                   <input
                     id="phone"
@@ -205,24 +203,24 @@ function Register() {
                     autoComplete="tel"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                    className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                       errors.phone ? "border-red-500" : "border-gray-300"
                     }`}
                     placeholder="Enter your phone number"
                   />
                 </div>
                 {errors.phone && (
-                  <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.phone}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="company" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                   Company Name
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaBuilding className="h-5 w-5 text-gray-400" />
+                    <FaBuilding className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                   </div>
                   <input
                     id="company"
@@ -231,27 +229,27 @@ function Register() {
                     autoComplete="organization"
                     value={formData.company}
                     onChange={handleChange}
-                    className={`block w-full pl-10 pr-3 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                    className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                       errors.company ? "border-red-500" : "border-gray-300"
                     }`}
                     placeholder="Enter your company name"
                   />
                 </div>
                 {errors.company && (
-                  <p className="mt-1 text-sm text-red-600">{errors.company}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.company}</p>
                 )}
               </div>
             </div>
 
             {/* Password Fields */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                   Password
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaLock className="h-5 w-5 text-gray-400" />
+                    <FaLock className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                   </div>
                   <input
                     id="password"
@@ -260,7 +258,7 @@ function Register() {
                     autoComplete="new-password"
                     value={formData.password}
                     onChange={handleChange}
-                    className={`block w-full pl-10 pr-12 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                    className={`block w-full pl-9 sm:pl-10 pr-10 sm:pr-12 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                       errors.password ? "border-red-500" : "border-gray-300"
                     }`}
                     placeholder="Create a password"
@@ -271,24 +269,24 @@ function Register() {
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <FaEyeSlash className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                      <FaEyeSlash className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600" />
                     ) : (
-                      <FaEye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                      <FaEye className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600" />
                     )}
                   </button>
                 </div>
                 {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.password}</p>
                 )}
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="confirmPassword" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
                   Confirm Password
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FaLock className="h-5 w-5 text-gray-400" />
+                    <FaLock className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                   </div>
                   <input
                     id="confirmPassword"
@@ -297,7 +295,7 @@ function Register() {
                     autoComplete="new-password"
                     value={formData.confirmPassword}
                     onChange={handleChange}
-                    className={`block w-full pl-10 pr-12 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
+                    className={`block w-full pl-9 sm:pl-10 pr-10 sm:pr-12 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                       errors.confirmPassword ? "border-red-500" : "border-gray-300"
                     }`}
                     placeholder="Confirm your password"
@@ -308,22 +306,22 @@ function Register() {
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   >
                     {showConfirmPassword ? (
-                      <FaEyeSlash className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                      <FaEyeSlash className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600" />
                     ) : (
-                      <FaEye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                      <FaEye className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 hover:text-gray-600" />
                     )}
                   </button>
                 </div>
                 {errors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+                  <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.confirmPassword}</p>
                 )}
               </div>
             </div>
 
             {/* Terms and Conditions */}
             <div>
-              <div className="flex items-start">
-                <div className="flex items-center h-5">
+              <div className="flex items-start gap-2 sm:gap-0">
+                <div className="flex items-center h-5 mt-0.5">
                   <input
                     id="agreeToTerms"
                     name="agreeToTerms"
@@ -333,8 +331,8 @@ function Register() {
                     className="h-4 w-4 text-[#002D7A] focus:ring-[#002D7A] border-gray-300 rounded"
                   />
                 </div>
-                <div className="ml-3 text-sm">
-                  <label htmlFor="agreeToTerms" className="text-gray-700">
+                <div className="ml-2 sm:ml-3 flex-1">
+                  <label htmlFor="agreeToTerms" className="text-xs sm:text-sm text-gray-700 leading-relaxed">
                     I agree to the{" "}
                     <a href="#" className="text-[#002D7A] hover:text-[#001C4C] transition-colors">
                       Terms and Conditions
@@ -347,23 +345,31 @@ function Register() {
                 </div>
               </div>
               {errors.agreeToTerms && (
-                <p className="mt-1 text-sm text-red-600">{errors.agreeToTerms}</p>
+                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.agreeToTerms}</p>
               )}
             </div>
+
+            {/* Error Message */}
+            {submitError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-xs sm:text-sm">
+                {submitError}
+              </div>
+            )}
 
             {/* Submit Button */}
             <div>
               <button
                 type="submit"
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-[#002D7A] hover:bg-[#001C4C] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#002D7A] transition-colors duration-200"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-2.5 sm:py-3 px-4 border border-transparent text-sm sm:text-base font-medium rounded-lg text-white bg-[#002D7A] hover:bg-[#001C4C] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#002D7A] transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Account
+                {loading ? "Creating Account..." : "Create Account"}
               </button>
             </div>
 
             {/* Sign In Link */}
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
+            <div className="text-center pt-2 sm:pt-4">
+              <p className="text-xs sm:text-sm text-gray-600">
                 Already have an account?{" "}
                 <Link to="/login" className="font-medium text-[#002D7A] hover:text-[#001C4C] transition-colors">
                   Sign in here

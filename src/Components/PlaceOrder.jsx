@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { FaCheckCircle, FaTruck, FaBox, FaCreditCard, FaMapMarkerAlt, FaPhone, FaEnvelope, FaDownload, FaPrint, FaShare, FaArrowLeft } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { getOrderById } from "../services/api";
 
 function PlaceOrder() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const orderId = searchParams.get('orderId');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [orderData, setOrderData] = useState({
     orderId: "ORD-2024-001234",
     orderDate: new Date().toLocaleDateString(),
@@ -12,92 +18,219 @@ function PlaceOrder() {
     
     // Customer Information
     customer: {
-      name: "John Doe",
-      email: "john.doe@company.com",
-      phone: "+91 9876543210",
-      company: "ABC Corporation"
+      name: "",
+      email: "",
+      phone: "",
+      company: ""
     },
     
-    // Billing Address
+    // Billing Address - loaded from API
     billingAddress: {
-      name: "John Doe",
-      company: "ABC Corporation",
-      address: "123 Business Street, Sector 15",
-      city: "Mumbai",
-      state: "Maharashtra",
-      pincode: "400001",
-      phone: "+91 9876543210"
+      name: "",
+      company: "",
+      address: "",
+      city: "",
+      state: "",
+      pincode: "",
+      phone: ""
     },
     
-    // Shipping Address
+    // Shipping Address - loaded from API
     shippingAddress: {
-      name: "John Doe",
-      company: "ABC Corporation", 
-      address: "123 Business Street, Sector 15",
-      city: "Mumbai",
-      state: "Maharashtra",
-      pincode: "400001",
-      phone: "+91 9876543210"
+      name: "",
+      company: "", 
+      address: "",
+      city: "",
+      state: "",
+      pincode: "",
+      phone: ""
     },
     
-    // Payment Information
+    // Payment Information - loaded from API
     payment: {
-      method: "Credit Card",
-      cardNumber: "**** **** **** 1234",
-      amount: 128.97
+      method: "",
+      cardNumber: "",
+      amount: 0
     },
     
-    // Order Items
-    items: [
-      {
-        id: 1,
-        name: "Premium Ballpoint Pens (Pack of 50)",
-        price: 24.99,
-        originalPrice: 34.99,
-        quantity: 2,
-        image: "https://via.placeholder.com/80x80/002D7A/ffffff?text=Pen",
-        category: "Writing Instruments"
-      },
-      {
-        id: 2,
-        name: "A4 Copy Paper (5000 sheets)",
-        price: 45.99,
-        originalPrice: 55.99,
-        quantity: 1,
-        image: "https://via.placeholder.com/80x80/002D7A/ffffff?text=Paper",
-        category: "Paper Products"
-      },
-      {
-        id: 3,
-        name: "Office Desk Organizer Set",
-        price: 32.99,
-        originalPrice: 42.99,
-        quantity: 1,
-        image: "https://via.placeholder.com/80x80/002D7A/ffffff?text=Organizer",
-        category: "Office Supplies"
-      }
-    ],
+    // Order Items - loaded from API
+    items: [],
     
-    // Order Summary
+    // Order Summary - calculated from API data
     summary: {
-      subtotal: 128.97,
+      subtotal: 0,
       shipping: 0,
-      discount: 20.00,
-      total: 128.97
+      discount: 0,
+      total: 0
     }
   });
 
-  const [trackingSteps, setTrackingSteps] = useState([
-    { id: 1, title: "Order Confirmed", description: "Your order has been confirmed", status: "completed", date: "Today, 2:30 PM" },
-    { id: 2, title: "Processing", description: "Your order is being prepared", status: "completed", date: "Today, 3:15 PM" },
-    { id: 3, title: "Shipped", description: "Your order has been shipped", status: "current", date: "Tomorrow, 10:00 AM" },
-    { id: 4, title: "Out for Delivery", description: "Your order is out for delivery", status: "pending", date: "Day after tomorrow" },
-    { id: 5, title: "Delivered", description: "Your order has been delivered", status: "pending", date: "Day after tomorrow" }
-  ]);
+  const [trackingSteps, setTrackingSteps] = useState([]);
+
+  // Fetch order data from API
+  useEffect(() => {
+    async function fetchOrderData() {
+      if (!orderId) {
+        setError("Order ID not found");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      try {
+        const result = await getOrderById(orderId);
+        
+        if (result.ok && result.order) {
+          const order = result.order;
+          const items = result.items || [];
+
+          // Parse address
+          const addressParts = (order.address || "").split(",").map(s => s.trim());
+          
+          // Format order data
+          setOrderData({
+            orderId: `ORD-${String(order.id).padStart(6, '0')}`,
+            orderDate: order.order_date ? new Date(order.order_date).toLocaleDateString() : new Date().toLocaleDateString(),
+            orderTime: order.created_at ? new Date(order.created_at).toLocaleTimeString() : new Date().toLocaleTimeString(),
+            status: order.status || "pending",
+            estimatedDelivery: order.delivery_date ? new Date(order.delivery_date).toLocaleDateString() : "3-5 business days",
+            
+            // Customer Information
+            customer: {
+              name: order.customer_name || "N/A",
+              email: order.email || "N/A",
+              phone: order.phone || "N/A",
+              company: order.customer_firm || "N/A"
+            },
+            
+            // Billing Address
+            billingAddress: {
+              name: order.customer_name || "N/A",
+              company: order.customer_firm || "",
+              address: addressParts[0] || "",
+              city: addressParts[1] || "",
+              state: addressParts[2] || "",
+              pincode: addressParts[3] || "",
+              phone: order.phone || "N/A"
+            },
+            
+            // Shipping Address (same as billing for now)
+            shippingAddress: {
+              name: order.customer_name || "N/A",
+              company: order.customer_firm || "",
+              address: addressParts[0] || "",
+              city: addressParts[1] || "",
+              state: addressParts[2] || "",
+              pincode: addressParts[3] || "",
+              phone: order.phone || "N/A"
+            },
+            
+            // Payment Information
+            payment: {
+              method: order.payment === "paid" ? "Paid" : order.payment === "pending" ? "Pending" : "Cash on Delivery",
+              cardNumber: "**** **** **** ****",
+              amount: parseFloat(order.total_amount || 0)
+            },
+            
+            // Order Items
+            items: items.map(item => ({
+              id: item.id,
+              name: item.product_name || "Product",
+              price: parseFloat(item.price || 0),
+              originalPrice: parseFloat(item.price || 0) * 1.2, // Estimate old price
+              quantity: parseInt(item.quantity || 1),
+              image: null, // Will use fallback UI
+              category: item.category_name || "General"
+            })),
+            
+            // Order Summary
+            summary: {
+              subtotal: parseFloat(order.total_amount || 0),
+              shipping: 0,
+              discount: 0,
+              total: parseFloat(order.total_amount || 0)
+            }
+          });
+
+          // Set tracking steps based on order status
+          const statusMap = {
+            'pending': [{ id: 1, title: "Order Placed", description: "Your order has been placed", status: "completed", date: "Today" }],
+            'confirmed': [
+              { id: 1, title: "Order Confirmed", description: "Your order has been confirmed", status: "completed", date: "Today" },
+              { id: 2, title: "Processing", description: "Your order is being prepared", status: "current", date: "Today" }
+            ],
+            'processing': [
+              { id: 1, title: "Order Confirmed", description: "Your order has been confirmed", status: "completed", date: "Today" },
+              { id: 2, title: "Processing", description: "Your order is being prepared", status: "completed", date: "Today" },
+              { id: 3, title: "Shipped", description: "Your order is being shipped", status: "current", date: "Tomorrow" }
+            ],
+            'shipped': [
+              { id: 1, title: "Order Confirmed", description: "Your order has been confirmed", status: "completed", date: "Today" },
+              { id: 2, title: "Processing", description: "Your order is being prepared", status: "completed", date: "Today" },
+              { id: 3, title: "Shipped", description: "Your order has been shipped", status: "completed", date: "Today" },
+              { id: 4, title: "Out for Delivery", description: "Your order is out for delivery", status: "current", date: "Tomorrow" }
+            ],
+            'delivered': [
+              { id: 1, title: "Order Confirmed", description: "Your order has been confirmed", status: "completed", date: "Today" },
+              { id: 2, title: "Processing", description: "Your order is being prepared", status: "completed", date: "Today" },
+              { id: 3, title: "Shipped", description: "Your order has been shipped", status: "completed", date: "Today" },
+              { id: 4, title: "Out for Delivery", description: "Your order is out for delivery", status: "completed", date: "Today" },
+              { id: 5, title: "Delivered", description: "Your order has been delivered", status: "completed", date: "Today" }
+            ],
+            'cancelled': [
+              { id: 1, title: "Order Placed", description: "Your order was placed", status: "completed", date: "Today" },
+              { id: 2, title: "Cancelled", description: "Your order has been cancelled", status: "completed", date: "Today" }
+            ]
+          };
+
+          setTrackingSteps(statusMap[order.status] || statusMap['pending']);
+        } else {
+          setError(result.error || "Order not found");
+        }
+      } catch (err) {
+        setError("Failed to load order details");
+        // Silently handle error
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchOrderData();
+  }, [orderId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#002D7A] mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading order details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Order Not Found</h2>
+          <p className="text-gray-600 mb-6">{error}</p>
+          <Link 
+            to="/" 
+            className="bg-[#002D7A] text-white px-6 py-3 rounded-lg hover:bg-[#001C4C] transition-colors"
+          >
+            Go to Home
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const handleDownloadInvoice = () => {
     // Simulate invoice download
-    console.log("Downloading invoice for order:", orderData.orderId);
     // In a real app, this would generate and download a PDF invoice
   };
 
@@ -115,9 +248,13 @@ function PlaceOrder() {
     } else {
       // Fallback: copy to clipboard
       navigator.clipboard.writeText(window.location.href);
-      alert("Order link copied to clipboard!");
+      // Link copied - could show toast if needed
     }
   };
+
+  if (!orderData) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -125,9 +262,9 @@ function PlaceOrder() {
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-8">
           <div className="flex items-center gap-4">
-            <Link to="/checkout" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors">
+            <Link to="/profile" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors">
               <FaArrowLeft size={20} />
-              Back to Checkout
+              Back to Profile
             </Link>
           </div>
           <h1 className="text-3xl font-bold text-[#002D7A] mt-4">Order Confirmation</h1>
@@ -207,31 +344,40 @@ function PlaceOrder() {
               {/* Order Items */}
               <div className="border-t border-gray-200 pt-6">
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Order Items</h3>
-                <div className="space-y-4">
-                  {orderData.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
-                      <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded" />
-                      <div className="flex-1">
-                        <h4 className="font-medium text-gray-800">{item.name}</h4>
-                        <p className="text-sm text-gray-600">{item.category}</p>
-                        <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                {orderData.items && orderData.items.length > 0 ? (
+                  <div className="space-y-4">
+                    {orderData.items.map((item) => (
+                      <div key={item.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
+                        <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-gray-800">{item.name}</h4>
+                          <p className="text-sm text-gray-600">{item.category}</p>
+                          <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-[#002D7A]">₹{(item.price * item.quantity).toFixed(2)}</p>
+                          {item.originalPrice && item.originalPrice > item.price && (
+                            <>
+                              <p className="text-sm text-gray-500 line-through">₹{(item.originalPrice * item.quantity).toFixed(2)}</p>
+                              <p className="text-xs text-green-600">Save ₹{((item.originalPrice - item.price) * item.quantity).toFixed(2)}</p>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-[#002D7A]">₹{(item.price * item.quantity).toFixed(2)}</p>
-                        <p className="text-sm text-gray-500 line-through">₹{(item.originalPrice * item.quantity).toFixed(2)}</p>
-                        <p className="text-xs text-green-600">Save ₹{((item.originalPrice - item.price) * item.quantity).toFixed(2)}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No items found</p>
+                )}
               </div>
             </div>
 
             {/* Order Tracking */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Tracking</h2>
-              <div className="space-y-4">
-                {trackingSteps.map((step, index) => (
+            {trackingSteps.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Tracking</h2>
+                <div className="space-y-4">
+                  {trackingSteps.map((step, index) => (
                   <div key={step.id} className="flex items-start gap-4">
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                       step.status === "completed" ? "bg-green-500 text-white" :
@@ -254,9 +400,10 @@ function PlaceOrder() {
                       <p className="text-xs text-gray-500 mt-1">{step.date}</p>
                     </div>
                   </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Customer Support */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

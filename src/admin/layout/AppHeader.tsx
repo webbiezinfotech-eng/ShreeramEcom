@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
-
+import srlogo from "../../assets/srlogo.png";
 import UserDropdown from "../components/header/UserDropdown";
 
 const AppHeader: React.FC = () => {
@@ -74,7 +74,7 @@ const AppHeader: React.FC = () => {
 
           <Link to="/admin" className="lg:hidden">
             <img
-              src="/images/logo/logo.jpg"
+              src={srlogo}
               alt="Shreeram Stationery"
               className="h-8 w-auto"
             />

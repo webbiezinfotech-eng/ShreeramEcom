@@ -20,7 +20,6 @@ export default function QuotePopup({ isOpen, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     // Here you can add your form submission logic
-    console.log("Quote request:", formData);
     setIsSubmitted(true);
     
     // Reset form after 2 seconds

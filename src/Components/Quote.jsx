@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { submitQuote } from "../services/api";
 
 function Quote() {
   const [form, setForm] = useState({
@@ -9,15 +10,33 @@ function Quote() {
     requirements: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    setError(""); // Clear error when user types
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setError("");
+    setLoading(true);
+    
+    try {
+      const result = await submitQuote(form);
+      if (result.ok) {
+        setSubmitted(true);
+      } else {
+        setError(result.error || "Failed to submit quote. Please try again.");
+      }
+    } catch (err) {
+      setError("An error occurred. Please try again.");
+      // Silently handle error
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -107,8 +126,18 @@ function Quote() {
                 />
               </div>
 
-              <button type="submit" className="w-full bg-[#FE7F06] hover:bg-[#e46f00] text-white font-semibold py-3 rounded-lg">
-                Submit Request
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-[#FE7F06] hover:bg-[#e46f00] text-white font-semibold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? "Submitting..." : "Submit Request"}
               </button>
             </form>
           )}

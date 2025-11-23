@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { CartProvider } from './contexts/CartContext';
+import { WishlistProvider } from './contexts/WishlistContext';
 import WebsiteApp from './WebsiteApp';
 import AdminApp from './admin/AdminApp';
 
@@ -13,7 +14,9 @@ function App() {
         {/* Website Routes - Default */}
         <Route path="/*" element={
           <CartProvider>
-            <WebsiteApp />
+            <WishlistProvider>
+              <WebsiteApp />
+            </WishlistProvider>
           </CartProvider>
         } />
       </Routes>

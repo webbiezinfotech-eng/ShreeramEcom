@@ -4,6 +4,9 @@ import { FaSearch, FaFilter, FaShoppingCart, FaStar, FaHeart, FaEye, FaArrowLeft
 import { Link } from "react-router-dom";
 import { getProducts, getProductsByCategory, getCategories } from "../services/api";
 import { useCart } from "../contexts/CartContext";
+import { useWishlist } from "../contexts/WishlistContext";
+import Toast from "./Toast";
+import LoginPrompt from "./LoginPrompt";
 
 function CategoryPage() {
   const { category } = useParams();
@@ -14,70 +17,129 @@ function CategoryPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ isOpen: false, message: "", type: "success" });
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const { addItemToCart, getCartCount } = useCart();
+  const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
 
-  // Category configuration
-  const categoryConfig = {
-    "office-supplies": {
-      title: "Office Supplies",
-      description: "Professional office supplies for your workplace needs",
-      icon: "🏢",
-      color: "from-[#002D7A] to-[#001C4C]"
-    },
-    "school-supplies": {
-      title: "School Supplies", 
-      description: "Essential supplies for students and educational institutions",
-      icon: "🎒",
-      color: "from-[#002D7A] to-[#001C4C]"
-    },
-    "writing-instruments": {
-      title: "Writing Instruments",
-      description: "Quality pens, pencils, and writing tools for all needs",
-      icon: "✏️",
-      color: "from-[#002D7A] to-[#001C4C]"
-    },
-    "paper-products": {
-      title: "Paper Products",
-      description: "High-quality paper products for printing and writing",
-      icon: "📄",
-      color: "from-[#002D7A] to-[#001C4C]"
+  // Get current category from API data
+  const getCurrentCategoryInfo = () => {
+    if (!category || category === "all-products") {
+      return {
+        title: "All Products",
+        description: "Browse our complete range of stationery and office supplies",
+        icon: "🛍️",
+        color: "from-[#002D7A] to-[#001C4C]"
+      };
     }
+    
+    // Find category from API data
+    const foundCategory = categories.find(cat => {
+      const slug = cat.slug || (cat.name ? cat.name.toLowerCase().replace(/\s+/g, '-') : '');
+      return slug === category || cat.id === parseInt(category) || cat.name?.toLowerCase() === category;
+    });
+    
+    if (foundCategory) {
+      return {
+        title: foundCategory.name || "Category",
+        description: `Explore our ${foundCategory.name} collection`,
+        icon: "📦",
+        color: "from-[#002D7A] to-[#001C4C]"
+      };
+    }
+    
+    // Fallback
+    return {
+      title: category.charAt(0).toUpperCase() + category.slice(1).replace(/-/g, ' '),
+      description: "Browse our complete range of stationery and office supplies",
+      icon: "🛍️",
+      color: "from-[#002D7A] to-[#001C4C]"
+    };
   };
 
-  const currentCategory = categoryConfig[category] || {
-    title: "All Products",
-    description: "Browse our complete range of stationery and office supplies",
-    icon: "🛍️",
-    color: "from-[#002D7A] to-[#001C4C]"
-  };
+  const currentCategory = getCurrentCategoryInfo();
 
   // ✅ Load categories and products from API
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
-        const [cats, prods] = await Promise.all([
-          getCategories(),
-          getProducts()
-        ]);
+        // First load categories
+        const cats = await getCategories();
         setCategories(cats || []);
+        
+        // Then load products based on category
+        let prods = [];
+        const currentCategory = category;
+        
+        if (!currentCategory || currentCategory === "all-products") {
+          // Fetch all products
+          prods = await getProducts();
+        } else {
+          // Find category ID
+          let categoryId = null;
+          
+          // Try numeric ID first
+          if (!isNaN(currentCategory)) {
+            const cat = cats.find(c => c.id === parseInt(currentCategory));
+            if (cat) categoryId = cat.id;
+          }
+          
+          // Try slug match
+          if (!categoryId) {
+            const cat = cats.find(c => {
+              const nameSlug = c.name?.toLowerCase().replace(/\s+/g, '-');
+              return c.slug === currentCategory || nameSlug === currentCategory || c.name?.toLowerCase() === currentCategory.toLowerCase();
+            });
+            if (cat) categoryId = cat.id;
+          }
+          
+          if (categoryId) {
+            // Fetch products for specific category
+            prods = await getProductsByCategory(categoryId);
+          } else {
+            // Fallback: fetch all products
+            prods = await getProducts();
+          }
+        }
+        
         setProducts(prods || []);
       } catch (error) {
-        console.error("Error fetching data:", error);
+        // Silently handle error
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, []);
+  }, [category]);
 
   // ✅ Find category ID from category slug
   const findCategoryId = () => {
     if (!category || category === "all-products") return null;
-    const cat = categories.find(c => 
-      c.slug === category || 
-      c.name?.toLowerCase().replace(/\s+/g, '-') === category
-    );
+    if (categories.length === 0) return null;
+    
+    // First try to find by numeric ID
+    if (!isNaN(category)) {
+      const cat = categories.find(c => c.id === parseInt(category));
+      if (cat) return cat.id;
+    }
+    
+    // Try to find by slug
+    let cat = categories.find(c => c.slug === category);
+    
+    // If not found, try to match by name (converted to slug)
+    if (!cat) {
+      cat = categories.find(c => {
+        const nameSlug = c.name?.toLowerCase().replace(/\s+/g, '-');
+        return nameSlug === category;
+      });
+    }
+    
+    // Try direct name match
+    if (!cat) {
+      cat = categories.find(c => c.name?.toLowerCase() === category.toLowerCase());
+    }
+    
     return cat ? cat.id : null;
   };
 
@@ -130,9 +192,9 @@ function CategoryPage() {
   const handleAddToCart = async (product) => {
     const result = await addItemToCart(product.id, 1);
     if (result.success) {
-      alert(`${product.title || product.name} added to cart!`);
+      setToast({ isOpen: true, message: `${product.title || product.name} added to cart!`, type: "success" });
     } else {
-      alert('Failed to add to cart: ' + (result.error || 'Unknown error'));
+      setToast({ isOpen: true, message: 'Failed to add to cart: ' + (result.error || 'Unknown error'), type: "error" });
     }
   };
 
@@ -298,12 +360,33 @@ function CategoryPage() {
                       </span>
                     </div>
                     <div className="absolute top-2 right-2 flex flex-col gap-1">
-                      <button className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50">
-                        <FaHeart className="text-gray-400 hover:text-red-500" size={14} />
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          if (isInWishlist(product.id)) {
+                            await removeFromWishlist(null, product.id);
+                          } else {
+                            const result = await addToWishlist(product.id);
+                            if (result.requiresLogin) {
+                              setShowLoginPrompt(true);
+                            }
+                          }
+                        }}
+                        className={`p-2 rounded-full shadow-md transition-colors ${
+                          isInWishlist(product.id)
+                            ? 'bg-red-500 text-white'
+                            : 'bg-white text-gray-400 hover:text-red-500'
+                        }`}
+                        title={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                      >
+                        <FaHeart size={14} />
                       </button>
-                      <button className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50">
+                      <Link
+                        to={`/product/${product.id}`}
+                        className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
+                      >
                         <FaEye className="text-gray-400 hover:text-blue-500" size={14} />
-                      </button>
+                      </Link>
                     </div>
                   </div>
 
@@ -394,6 +477,21 @@ function CategoryPage() {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      <Toast
+        isOpen={toast.isOpen}
+        onClose={() => setToast({ ...toast, isOpen: false })}
+        message={toast.message}
+        type={toast.type}
+      />
+
+      {/* Login Prompt */}
+      <LoginPrompt
+        isOpen={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        message="Please login first to add products to your wishlist"
+      />
     </div>
   );
 }

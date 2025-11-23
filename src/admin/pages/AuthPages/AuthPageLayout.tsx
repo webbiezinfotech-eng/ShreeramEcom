@@ -1,7 +1,6 @@
 import React from "react";
-import GridShape from "../../components/common/GridShape";
 import { Link } from "react-router";
-import { ThemeToggleButton } from "../../components/common/ThemeToggleButton";
+import srlogo from "../../../assets/srlogo.png";
 
 export default function AuthLayout({
   children,
@@ -9,30 +8,33 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative p-6 bg-white z-1 dark:bg-gray-900 sm:p-0">
-      <div className="relative flex flex-col justify-center w-full h-screen lg:flex-row dark:bg-gray-900 sm:p-0">
+    <div className="relative bg-white dark:bg-gray-900 min-h-screen">
+      <div className="relative flex flex-col w-full min-h-screen lg:flex-row dark:bg-gray-900">
         {children}
-        <div className="items-center hidden w-full h-full lg:w-1/2 bg-brand-950 dark:bg-white/5 lg:grid">
-          <div className="relative flex items-center justify-center z-1">
-            {/* <!-- ===== Common Grid Shape Start ===== --> */}
-            <GridShape />
-            <div className="flex flex-col items-center max-w-xs">
-              <Link to="/" className="block mb-4">
+        <div className="items-center justify-center hidden w-full lg:w-1/2 bg-gradient-to-br from-blue-950 via-blue-900 to-blue-950 dark:from-gray-800 dark:via-gray-900 dark:to-gray-800 lg:flex relative overflow-hidden min-h-screen">
+          {/* Background Pattern */}
+          <div className="absolute inset-0 opacity-5">
+            <div className="absolute inset-0" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            }}></div>
+          </div>
+          <div className="relative flex flex-col items-center justify-center z-10 px-8 lg:px-12 xl:px-16 py-16 xl:py-20 w-full">
+            <div className="mb-10 xl:mb-14">
+              <Link to="/" className="block p-6 xl:p-8 bg-white/10 dark:bg-white/5 rounded-3xl backdrop-blur-md border border-white/20 dark:border-white/10 shadow-2xl hover:bg-white/15 transition-all duration-300">
                 <img
-                  width={231}
-                  height={48}
-                  src="/images/logo/logo.jpg"
+                  src={srlogo}
                   alt="Shreeram Stationery"
+                  className="h-20 xl:h-28 w-auto max-w-md object-contain"
                 />
               </Link>
-              <p className="text-center text-gray-400 dark:text-white/60">
-                Professional Stationery Solutions
-              </p>
             </div>
+            <h2 className="text-3xl xl:text-5xl font-bold text-white text-center mb-5 xl:mb-6 leading-tight">
+              Welcome to Admin Panel
+            </h2>
+            <p className="text-center text-blue-100 dark:text-gray-300 text-lg xl:text-xl max-w-lg xl:max-w-xl leading-relaxed">
+              Professional Stationery Solutions Management System
+            </p>
           </div>
-        </div>
-        <div className="fixed z-50 hidden bottom-6 right-6 sm:block">
-          <ThemeToggleButton />
         </div>
       </div>
     </div>

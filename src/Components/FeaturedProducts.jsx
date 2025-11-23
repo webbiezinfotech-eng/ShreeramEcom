@@ -1,9 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { FaHeart } from "react-icons/fa";
 import { getProducts } from "../services/api";
+import { useWishlist } from "../contexts/WishlistContext";
+import LoginPrompt from "./LoginPrompt";
 
 export default function FeaturedProducts() {
   const [products, setProducts] = useState([]);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
 
   // ✅ Load products from API
   useEffect(() => {
@@ -33,15 +38,47 @@ export default function FeaturedProducts() {
                 className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden"
               >
                 <div className="relative">
-                  <img
-                    src={product.image || "https://via.placeholder.com/300x200?text=Product"}
-                    alt={product.title}
-                    className="w-full h-48 object-cover"
-                  />
+                  {product.image ? (
+                    <img
+                      src={product.image}
+                      alt={product.title}
+                      className="w-full h-48 object-cover bg-gray-200"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        const fallback = e.target.nextElementSibling;
+                        if (fallback) fallback.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`${product.image ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0`}>
+                    <span className="text-gray-400 text-2xl font-bold">{product.title?.charAt(0) || 'P'}</span>
+                  </div>
                   <div className="absolute top-2 left-2">
                     <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
                       Best Seller
                     </span>
+                  </div>
+                  <div className="absolute top-2 right-2">
+                    <button
+                      onClick={async () => {
+                        if (isInWishlist(product.id)) {
+                          await removeFromWishlist(null, product.id);
+                        } else {
+                          const result = await addToWishlist(product.id);
+                          if (result.requiresLogin) {
+                            setShowLoginPrompt(true);
+                          }
+                        }
+                      }}
+                      className={`p-2 rounded-full shadow-md transition-colors ${
+                        isInWishlist(product.id)
+                          ? 'bg-red-500 text-white'
+                          : 'bg-white text-gray-400 hover:text-red-500'
+                      }`}
+                      title={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                    >
+                      <FaHeart size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -93,6 +130,13 @@ export default function FeaturedProducts() {
           )}
         </div>
       </div>
+
+      {/* Login Prompt */}
+      <LoginPrompt
+        isOpen={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        message="Please login first to add products to your wishlist"
+      />
     </section>
   );
 }

@@ -31,7 +31,23 @@ function read_json_body() {
 try {
     $pdo = pdo_conn();
     $method = $_SERVER['REQUEST_METHOD'];
-    $override = isset($_POST['_method']) ? strtoupper($_POST['_method']) : null;
+    
+    // ✅ Handle _method override for FormData (POST requests with _method=PUT)
+    // Check $_POST first (FormData), then check raw input for JSON
+    $override = null;
+    if (!empty($_POST['_method'])) {
+        $override = strtoupper($_POST['_method']);
+    } else {
+        // For JSON body, check in request body
+        $rawInput = file_get_contents('php://input');
+        if ($rawInput) {
+            $jsonData = json_decode($rawInput, true);
+            if (is_array($jsonData) && isset($jsonData['_method'])) {
+                $override = strtoupper($jsonData['_method']);
+            }
+        }
+    }
+    
     if ($override) $method = $override; // support POST + _method=PUT/DELETE
 
     /* ----------------- READ (LIST or SINGLE) ----------------- */
@@ -96,7 +112,8 @@ try {
         $total = (int)$countStmt->fetchColumn();
 
         $sql = "
-            SELECT p.*, COALESCE(c.name,'') AS category_name
+            SELECT p.*, COALESCE(c.name,'') AS category_name,
+                   (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY created_at DESC LIMIT 1) as image
             FROM products p
             LEFT JOIN categories c ON c.id = p.category_id
             " . ($where ? $where : "") . "
@@ -111,6 +128,14 @@ try {
         }
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Add image_url field for compatibility
+        foreach ($rows as &$row) {
+            if (!empty($row['image'])) {
+                $row['image_url'] = $row['image'];
+            }
+        }
+        unset($row);
 
         echo json_encode([
             'ok'    => true,
@@ -144,6 +169,30 @@ try {
                         continue;
                     }
 
+                    // Check for duplicate product (case-insensitive name matching)
+                    $checkProduct = $pdo->prepare("SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1");
+                    $checkProduct->execute([':name' => $name]);
+                    if ($checkProduct->fetch()) {
+                        $errors[] = "Row " . ($index + 1) . ": Product '$name' already exists (duplicate)";
+                        continue;
+                    }
+
+                    // Handle category - check if category_id is provided or category_name
+                    $category_id = null;
+                    if (isset($productData['category_id']) && $productData['category_id'] !== '' && $productData['category_id'] !== null) {
+                        $category_id = (int)$productData['category_id'];
+                    } elseif (isset($productData['category_name']) && !empty(trim($productData['category_name']))) {
+                        // If category name is provided, find existing category (case-insensitive)
+                        $categoryName = trim($productData['category_name']);
+                        $checkCategory = $pdo->prepare("SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1");
+                        $checkCategory->execute([':name' => $categoryName]);
+                        $catRow = $checkCategory->fetch(PDO::FETCH_ASSOC);
+                        if ($catRow) {
+                            $category_id = (int)$catRow['id'];
+                        }
+                        // If category doesn't exist, it will remain null (category will be ignored)
+                    }
+
                     $sku = isset($productData['sku']) ? trim($productData['sku']) : '';
                     $mrp = isset($productData['mrp']) ? ((float)$productData['mrp'] > 0 ? (float)$productData['mrp'] : null) : null;
                     $wholesale_rate = isset($productData['wholesale_rate']) ? ((float)$productData['wholesale_rate'] > 0 ? (float)$productData['wholesale_rate'] : null) : null;
@@ -154,7 +203,6 @@ try {
                     $brand = isset($productData['brand']) ? trim($productData['brand']) : '';
                     $dimensions = isset($productData['dimensions']) ? trim($productData['dimensions']) : '';
                     $currency = isset($productData['currency']) ? trim($productData['currency']) : 'INR';
-                    $category_id = isset($productData['category_id']) && $productData['category_id'] !== '' && $productData['category_id'] !== null ? (int)$productData['category_id'] : null;
 
                     $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id)
                             VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id)";
@@ -202,14 +250,21 @@ try {
 
         if ($name === '') throw new Exception('name is required');
 
+        // Check for duplicate product (case-insensitive name matching)
+        $checkProduct = $pdo->prepare("SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1");
+        $checkProduct->execute([':name' => $name]);
+        if ($checkProduct->fetch()) {
+            throw new Exception("Product with name '$name' already exists (duplicate)");
+        }
+
         // ✅ Handle file upload
         $imagePath = null;
         if (!empty($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
             // File location: website/src/api/endpoints/products.php
-            // Uploads folder: website/uploads/
-            // Path: Go up 3 levels (endpoints -> api -> src -> website), then into uploads
-            $websiteRoot = dirname(dirname(dirname(__DIR__))); // Goes from endpoints -> api -> src -> website
-            $uploadDir = $websiteRoot . '/uploads/';
+            // Uploads folder: website/src/api/uploads/
+            // Path: Go up 1 level from endpoints to api, then into uploads
+            $apiRoot = dirname(__DIR__); // Goes from endpoints -> api
+            $uploadDir = $apiRoot . '/uploads/';
             
             // Normalize path (remove any double slashes)
             $uploadDir = str_replace('//', '/', $uploadDir);
@@ -249,8 +304,8 @@ try {
             $target = $uploadDir . $filename;
 
             if (move_uploaded_file($file['tmp_name'], $target)) {
-                // Store relative path for database (uploads/filename.ext)
-                $imagePath = "uploads/" . $filename;
+                // Store relative path for database (api/uploads/filename.ext)
+                $imagePath = "api/uploads/" . $filename;
             } else {
                 $errorMsg = error_get_last();
                 $error = $errorMsg ? $errorMsg['message'] : 'Unknown error';
@@ -278,13 +333,36 @@ try {
         $productId = (int)$pdo->lastInsertId();
         
         // ✅ Save image to product_images table if image was uploaded
-        if ($imagePath !== null) {
+        if (!empty($imagePath) && $productId > 0) {
             try {
+                // Insert image record into product_images table
                 $imgSt = $pdo->prepare('INSERT INTO product_images (product_id, image_url, created_at) VALUES (?, ?, NOW())');
-                $imgSt->execute([$productId, $imagePath]);
+                $result = $imgSt->execute([$productId, $imagePath]);
+                
+                if (!$result) {
+                    $errorInfo = $imgSt->errorInfo();
+                    $errorMsg = $errorInfo[2] ?? 'Unknown error';
+                    error_log("CRITICAL: Failed to save image to product_images table. Product ID: $productId, Image Path: $imagePath, PDO Error: " . print_r($errorInfo, true));
+                    throw new Exception("Failed to save image record: $errorMsg");
+                }
+                
+                // Verify the insert was successful by checking the database
+                $checkSt = $pdo->prepare("SELECT id, image_url FROM product_images WHERE product_id = ? AND image_url = ? LIMIT 1");
+                $checkSt->execute([$productId, $imagePath]);
+                $insertedRow = $checkSt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($insertedRow) {
+                    error_log("SUCCESS: Image saved to product_images table. ID: {$insertedRow['id']}, Product ID: $productId, Image Path: $imagePath");
+                } else {
+                    error_log("WARNING: Image insertion verification failed. Product ID: $productId, Image Path: $imagePath");
+                    // Try one more time
+                    $imgSt2 = $pdo->prepare('INSERT INTO product_images (product_id, image_url, created_at) VALUES (?, ?, NOW())');
+                    $imgSt2->execute([$productId, $imagePath]);
+                }
             } catch (Exception $e) {
-                // Log error but don't fail the product creation
-                error_log("Failed to save image to product_images table: " . $e->getMessage());
+                error_log("ERROR: Failed to save image to product_images table: " . $e->getMessage());
+                error_log("Stack trace: " . $e->getTraceAsString());
+                // Don't throw - product is already created, just log the image error
             }
         }
         
@@ -296,14 +374,29 @@ try {
     if ($method === 'PUT' || $method === 'PATCH') {
         if (!isset($_GET['id'])) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'id required']); exit; }
         $id = (int)$_GET['id'];
-        $body = $_POST ?: read_json_body();
+        
+        // ✅ Handle FormData - when POST with _method=PUT is used, $_POST and $_FILES are available
+        // Check if this is multipart/form-data request (FormData)
+        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+        $isMultipart = strpos($contentType, 'multipart/form-data') !== false || !empty($_FILES);
+        
+        // For FormData (multipart), use $_POST and $_FILES
+        // For JSON, use read_json_body()
+        if ($isMultipart) {
+            $body = $_POST ?: [];
+        } else {
+            $body = read_json_body();
+        }
 
         // ✅ Handle image upload for update
         $imagePath = null;
-        if (!empty($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            // Same path logic as CREATE
-            $websiteRoot = dirname(dirname(dirname(__DIR__)));
-            $uploadDir = $websiteRoot . '/uploads/';
+        // Check $_FILES - it's available for POST requests (even with _method=PUT)
+        $hasFile = !empty($_FILES['image']['tmp_name']) && isset($_FILES['image']['error']) && $_FILES['image']['error'] === UPLOAD_ERR_OK;
+        
+        if ($hasFile) {
+            // Uploads folder: website/src/api/uploads/
+            $apiRoot = dirname(__DIR__); // Goes from endpoints -> api
+            $uploadDir = $apiRoot . '/uploads/';
             $uploadDir = str_replace('//', '/', $uploadDir);
             
             if (!is_dir($uploadDir)) {
@@ -344,7 +437,7 @@ try {
             $target = $uploadDir . $filename;
             
             if (move_uploaded_file($file['tmp_name'], $target)) {
-                $imagePath = "uploads/" . $filename;
+                $imagePath = "api/uploads/" . $filename;
                 
                 // ✅ Delete old image files from server
                 $oldSt = $pdo->prepare("SELECT image_url FROM product_images WHERE product_id = ?");
@@ -352,7 +445,14 @@ try {
                 $oldImages = $oldSt->fetchAll(PDO::FETCH_ASSOC);
                 foreach ($oldImages as $oldImg) {
                     if (!empty($oldImg['image_url'])) {
-                        $oldImagePath = $websiteRoot . '/' . $oldImg['image_url'];
+                        // Handle both old format (uploads/) and new format (api/uploads/)
+                        $oldImagePath = '';
+                        if (strpos($oldImg['image_url'], 'api/uploads/') === 0) {
+                            $oldImagePath = dirname(__DIR__) . '/' . $oldImg['image_url'];
+                        } else {
+                            $websiteRoot = dirname(dirname(dirname(__DIR__)));
+                            $oldImagePath = $websiteRoot . '/' . $oldImg['image_url'];
+                        }
                         if (file_exists($oldImagePath)) {
                             @unlink($oldImagePath);
                         }
@@ -405,24 +505,40 @@ try {
         }
 
         // ✅ Update product_images table if new image uploaded
-        if ($imagePath !== null) {
-            // Delete old records from product_images table
-            $delSt = $pdo->prepare("DELETE FROM product_images WHERE product_id = ?");
-            $delSt->execute([$id]);
-            
-            // Insert new image record
-            $imgSt = $pdo->prepare('INSERT INTO product_images (product_id, image_url, created_at) VALUES (?, ?, NOW())');
-            $imgResult = $imgSt->execute([$id, $imagePath]);
-            
-            if (!$imgResult) {
-                $errorInfo = $imgSt->errorInfo();
-                error_log("CRITICAL: Failed to save image to product_images table. Product ID: $id, Image Path: $imagePath, PDO Error: " . print_r($errorInfo, true));
-            } else {
-                // Success - verify at least one row was inserted
-                $insertedRows = $imgSt->rowCount();
-                if ($insertedRows === 0) {
-                    error_log("WARNING: Image insertion returned 0 rows for product_id: $id, image_url: $imagePath");
+        if (!empty($imagePath)) {
+            try {
+                // Delete old records from product_images table
+                $delSt = $pdo->prepare("DELETE FROM product_images WHERE product_id = ?");
+                $delSt->execute([$id]);
+                
+                // Insert new image record
+                $imgSt = $pdo->prepare('INSERT INTO product_images (product_id, image_url, created_at) VALUES (?, ?, NOW())');
+                $imgResult = $imgSt->execute([$id, $imagePath]);
+                
+                if (!$imgResult) {
+                    $errorInfo = $imgSt->errorInfo();
+                    $errorMsg = $errorInfo[2] ?? 'Unknown error';
+                    error_log("CRITICAL: Failed to save image to product_images table. Product ID: $id, Image Path: $imagePath, PDO Error: " . print_r($errorInfo, true));
+                    throw new Exception("Failed to save image record: $errorMsg");
                 }
+                
+                // Verify the insert was successful by checking the database
+                $checkSt = $pdo->prepare("SELECT id, image_url FROM product_images WHERE product_id = ? AND image_url = ? LIMIT 1");
+                $checkSt->execute([$id, $imagePath]);
+                $insertedRow = $checkSt->fetch(PDO::FETCH_ASSOC);
+                
+                if ($insertedRow) {
+                    error_log("SUCCESS: Image saved to product_images table. ID: {$insertedRow['id']}, Product ID: $id, Image Path: $imagePath");
+                } else {
+                    error_log("WARNING: Image insertion verification failed. Product ID: $id, Image Path: $imagePath");
+                    // Try one more time
+                    $imgSt2 = $pdo->prepare('INSERT INTO product_images (product_id, image_url, created_at) VALUES (?, ?, NOW())');
+                    $imgSt2->execute([$id, $imagePath]);
+                }
+            } catch (Exception $e) {
+                error_log("ERROR: Failed to save image to product_images table: " . $e->getMessage());
+                error_log("Stack trace: " . $e->getTraceAsString());
+                // Don't fail the update completely, but log the error
             }
         }
 

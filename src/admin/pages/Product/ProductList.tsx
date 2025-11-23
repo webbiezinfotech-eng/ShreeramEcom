@@ -191,6 +191,8 @@ const ProductList: React.FC = () => {
 
       // Process rows (skip header)
       const productsToImport = [];
+      const seenProductNames = new Set<string>(); // Track duplicates in this batch
+      
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
         if (!row || row.length === 0) continue;
@@ -198,13 +200,25 @@ const ProductList: React.FC = () => {
         const name = String(row[nameIdx] || "").trim();
         if (!name) continue; // Skip empty rows
 
-        // Find category by name
+        // Check for duplicate product name in this batch (case-insensitive)
+        const nameLower = name.toLowerCase();
+        if (seenProductNames.has(nameLower)) {
+          console.warn(`Row ${i + 1}: Skipping duplicate product "${name}" in Excel file`);
+          continue; // Skip duplicate in same file
+        }
+        seenProductNames.add(nameLower);
+
+        // Find category by name (case-insensitive matching)
         let categoryId = null;
-        const categoryName = categoryIdx >= 0 ? String(row[categoryIdx] || "").trim() : "";
-        if (categoryName) {
-          const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
-          if (category) {
-            categoryId = category.id;
+        let categoryName = "";
+        if (categoryIdx >= 0) {
+          categoryName = String(row[categoryIdx] || "").trim();
+          if (categoryName) {
+            // Case-insensitive match with existing categories
+            const category = categories.find(c => c.name.toLowerCase().trim() === categoryName.toLowerCase().trim());
+            if (category) {
+              categoryId = category.id;
+            }
           }
         }
 
@@ -212,6 +226,7 @@ const ProductList: React.FC = () => {
           name: name,
           sku: skuIdx >= 0 ? String(row[skuIdx] || "").trim() : "",
           category_id: categoryId,
+          category_name: categoryName || undefined, // Also send category name for backend matching
           mrp: mrpIdx >= 0 ? parseFloat(String(row[mrpIdx] || "0")) || null : null,
           wholesale_rate: wholesaleIdx >= 0 ? parseFloat(String(row[wholesaleIdx] || "0")) || null : null,
           stock: stockIdx >= 0 ? parseInt(String(row[stockIdx] || "0")) || 0 : 0,

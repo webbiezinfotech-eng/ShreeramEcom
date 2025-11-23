@@ -10,6 +10,8 @@ import {
 } from "../icons";
 import { useSidebar } from "../context/SidebarContext";
 import { HorizontaLDots } from "../icons";
+import srlogo from "../../assets/srlogo.png";
+import srlogo3 from "../../assets/srlogo3.png";
 
 type NavItem = {
   name: string;
@@ -37,6 +39,11 @@ const navItems: NavItem[] = [
     icon: <UserCircleIcon />,
     name: "Customers",
     path: "/admin/customers",
+  },
+  {
+    icon: <ListIcon />,
+    name: "Categories",
+    path: "/admin/categories",
   },
   // {
   //   icon: <BoxCubeIcon />,
@@ -91,28 +98,16 @@ const AppSidebar: React.FC = () => {
       >
         <Link to="/admin">
           {isExpanded || isHovered || isMobileOpen ? (
-            <>
-              <img
-                className="dark:hidden"
-                src="/images/logo/logo.jpg"
-                alt="Shreeram Stationery"
-                width={180}
-                height={40}
-              />
-              <img
-                className="hidden dark:block"
-                src="/images/logo/logo.jpg"
-                alt="Shreeram Stationery"
-                width={180}
-                height={40}
-              />
-            </>
+            <img
+              src={srlogo}
+              alt="Shreeram Stationery"
+              className="h-10 w-auto max-w-[180px]"
+            />
           ) : (
             <img
-              src="/images/logo/shreeramlogo.png"
+              src={srlogo3}
               alt="Shreeram Stationery"
-              width={40}
-              height={40}
+              className="h-10 w-10 object-contain"
             />
           )}
         </Link>

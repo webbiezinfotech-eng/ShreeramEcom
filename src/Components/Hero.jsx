@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { getCategories } from "../services/api"; 
 import { FaTruckFast } from "react-icons/fa6";
 import { BsBoxSeam } from "react-icons/bs";
 import { MdOutlineVerified } from "react-icons/md";
 import { CiBadgeDollar } from "react-icons/ci";
 import { FaWhatsapp } from "react-icons/fa";
-import QuotePopup from "./QuotePopup";
+import WelcomePopup from "./WelcomePopup";
 
 function Hero() {
-  const [isQuotePopupOpen, setIsQuotePopupOpen] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [showWelcomePopup, setShowWelcomePopup] = useState(false);
+  const [welcomeData, setWelcomeData] = useState(null);
 
   // 🔹 Fetch categories from API
   useEffect(() => {
@@ -18,6 +20,25 @@ function Hero() {
       setCategories(data);
     }
     fetchData();
+  }, []);
+
+  // 🔹 Check for welcome popup on mount
+  useEffect(() => {
+    const welcomeInfo = localStorage.getItem('show_welcome_popup');
+    if (welcomeInfo) {
+      try {
+        const data = JSON.parse(welcomeInfo);
+        // Only show if it's recent (within last 5 seconds)
+        if (Date.now() - data.timestamp < 5000) {
+          setWelcomeData(data);
+          setShowWelcomePopup(true);
+        }
+        // Remove from localStorage
+        localStorage.removeItem('show_welcome_popup');
+      } catch (e) {
+        localStorage.removeItem('show_welcome_popup');
+      }
+    }
   }, []);
 
   return (
@@ -41,12 +62,6 @@ function Hero() {
               >
                 Browse Products →
               </a>
-              <button
-                onClick={() => setIsQuotePopupOpen(true)}
-                className="border-2 border-white p-2 md:px-6 md:py-3 sm:text-lg hover:bg-[#FE7F06] rounded-lg font-semibold hover:text-[#ffffff] transition"
-              >
-                Get Quote
-              </button>
             </div>
           </div>
 
@@ -95,19 +110,24 @@ function Hero() {
           {/* Category Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mt-8 md:mt-12">
             {categories.length > 0 ? (
-              categories.map((cat, index) => (
-                <a key={index} href={`/category/${cat.id}`} className="block">
-                  <div className="rounded-xl shadow-md md:shadow-lg border border-[#003fad2c] p-4 md:px-2 flex flex-col items-center hover:shadow-xl transition-shadow">
-                    <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
-                      🎨
+              categories.map((cat, index) => {
+                // Use category ID for routing (most reliable)
+                const categoryId = cat.id;
+                if (!categoryId) return null; // Skip if no ID
+                return (
+                  <Link key={cat.id || index} to={`/category/${categoryId}`} className="block">
+                    <div className="rounded-xl shadow-md md:shadow-lg border border-[#003fad2c] p-4 md:px-2 flex flex-col items-center hover:shadow-xl transition-shadow">
+                      <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
+                        🎨
+                      </div>
+                      <h3 className="font-semibold">{cat.name}</h3>
+                      <p className="text-gray-500 text-sm">
+                        {cat.items_count ? `${cat.items_count}+ items` : "Explore"}
+                      </p>
                     </div>
-                    <h3 className="font-semibold">{cat.name}</h3>
-                    <p className="text-gray-500 text-sm">
-                      {cat.items_count ? `${cat.items_count}+ items` : "Explore"}
-                    </p>
-                  </div>
-                </a>
-              ))
+                  </Link>
+                );
+              }).filter(Boolean)
             ) : (
               <p className="col-span-6 text-gray-500">Loading categories...</p>
             )}
@@ -115,11 +135,18 @@ function Hero() {
         </div>
       </section>
 
-      {/* Quote Popup */}
-      <QuotePopup
-        isOpen={isQuotePopupOpen}
-        onClose={() => setIsQuotePopupOpen(false)}
-      />
+      {/* Welcome Popup */}
+      {welcomeData && (
+        <WelcomePopup
+          isOpen={showWelcomePopup}
+          onClose={() => {
+            setShowWelcomePopup(false);
+            setWelcomeData(null);
+          }}
+          customerName={welcomeData.customerName}
+          isFirstTime={welcomeData.isFirstTime}
+        />
+      )}
     </div>
   );
 }

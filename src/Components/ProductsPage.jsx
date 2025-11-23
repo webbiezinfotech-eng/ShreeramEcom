@@ -7,40 +7,52 @@ import {
   FaHeart,
   FaEye,
 } from "react-icons/fa";
-import { Link } from "react-router-dom";
-import { getProducts } from "../services/api";
+import { Link, useSearchParams } from "react-router-dom";
+import { getProducts, getCategories } from "../services/api";
 import { useCart } from "../contexts/CartContext";
+import { useWishlist } from "../contexts/WishlistContext";
+import Toast from "./Toast";
+import LoginPrompt from "./LoginPrompt";
 
 function ProductsPage() {
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('q') || "";
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [selectedCategory, setSelectedCategory] = useState("All");
+  const [categories, setCategories] = useState([]);
   const [priceRange, setPriceRange] = useState([0, 1000]);
   const [sortBy, setSortBy] = useState("featured");
   const [showFilters, setShowFilters] = useState(false);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ isOpen: false, message: "", type: "success" });
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const { addItemToCart, getCartCount } = useCart();
+  const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
 
-  const categories = [
-    "All",
-    "Writing Instruments",
-    "Office Supplies",
-    "School Supplies",
-    "Paper Products",
-    "Art & Craft",
-    "Storage & Organization",
-  ];
+  // ✅ Fetch categories from backend
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        const cats = await getCategories();
+        setCategories(cats || []);
+      } catch (error) {
+        // Silently handle error
+      }
+    }
+    fetchCategories();
+  }, []);
 
   // ✅ Fetch products from backend
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
-      const data = await getProducts();
+      const data = await getProducts(null, 1, initialSearch);
       setProducts(data || []);
       setLoading(false);
     }
     fetchData();
-  }, []);
+  }, [initialSearch]);
 
   // ✅ Filter products
   const filteredProducts = products.filter((product) => {
@@ -48,8 +60,18 @@ function ProductsPage() {
       product.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.description?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesCategory =
-      selectedCategory === "All" || product.category === selectedCategory;
+    // Match category by name or category_id
+    let matchesCategory = true;
+    if (selectedCategory !== "All") {
+      if (typeof selectedCategory === 'number' || !isNaN(selectedCategory)) {
+        // If selectedCategory is a number (category ID)
+        matchesCategory = product.category_id === parseInt(selectedCategory);
+      } else {
+        // If selectedCategory is a string (category name)
+        matchesCategory = product.category?.toLowerCase() === selectedCategory.toLowerCase() ||
+                         product.category_name?.toLowerCase() === selectedCategory.toLowerCase();
+      }
+    }
 
     const matchesPrice =
       product.price >= priceRange[0] && product.price <= priceRange[1];
@@ -77,9 +99,9 @@ function ProductsPage() {
   const addToCart = async (product) => {
     const result = await addItemToCart(product.id, 1);
     if (result.success) {
-      alert(`${product.title} added to cart!`);
+      setToast({ isOpen: true, message: `${product.title} added to cart!`, type: "success" });
     } else {
-      alert('Failed to add to cart: ' + result.error);
+      setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
     }
   };
 
@@ -154,9 +176,10 @@ function ProductsPage() {
                   onChange={(e) => setSelectedCategory(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
                 >
+                  <option value="All">All Categories</option>
                   {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category}
+                    <option key={category.id} value={category.id}>
+                      {category.name}
                     </option>
                   ))}
                 </select>
@@ -236,19 +259,47 @@ function ProductsPage() {
                   className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden"
                 >
                   <div className="relative">
-                    <img
-                      src={product.image || "https://via.placeholder.com/300x200?text=Product"}
-                      alt={product.title}
-                      className="w-full h-48 object-cover"
-                    />
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.title}
+                        className="w-full h-48 object-cover bg-gray-200"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const fallback = e.target.nextElementSibling;
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className="hidden w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0">
+                      <span className="text-gray-400 text-2xl font-bold">{product.title?.charAt(0) || 'P'}</span>
+                    </div>
                     <div className="absolute top-2 left-2">
                       <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
                         Best Seller
                       </span>
                     </div>
                     <div className="absolute top-2 right-2 flex flex-col gap-1">
-                      <button className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50">
-                        <FaHeart className="text-gray-400 hover:text-red-500" />
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          if (isInWishlist(product.id)) {
+                            await removeFromWishlist(null, product.id);
+                          } else {
+                            const result = await addToWishlist(product.id);
+                            if (result.requiresLogin) {
+                              setShowLoginPrompt(true);
+                            }
+                          }
+                        }}
+                        className={`p-2 rounded-full shadow-md transition-colors ${
+                          isInWishlist(product.id)
+                            ? 'bg-red-500 text-white'
+                            : 'bg-white text-gray-400 hover:text-red-500'
+                        }`}
+                        title={isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                      >
+                        <FaHeart size={14} />
                       </button>
                       <Link
                         to={`/product/${product.id}`}
@@ -349,6 +400,21 @@ function ProductsPage() {
           </div>
         </div>
       </div>
+
+      {/* Toast Notification */}
+      <Toast
+        isOpen={toast.isOpen}
+        onClose={() => setToast({ ...toast, isOpen: false })}
+        message={toast.message}
+        type={toast.type}
+      />
+
+      {/* Login Prompt */}
+      <LoginPrompt
+        isOpen={showLoginPrompt}
+        onClose={() => setShowLoginPrompt(false)}
+        message="Please login first to add products to your wishlist"
+      />
     </div>
   );
 }
