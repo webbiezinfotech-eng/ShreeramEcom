@@ -8,7 +8,7 @@ import {
   FaEye,
 } from "react-icons/fa";
 import { Link, useSearchParams } from "react-router-dom";
-import { getProducts, getCategories } from "../services/api";
+import { getProducts, getCategories, canSeePrices } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import Toast from "./Toast";
@@ -116,13 +116,13 @@ function ProductsPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-12">
+      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-8 sm:py-10 lg:py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4">
               All Products
             </h1>
-            <p className="text-xl text-blue-100">
+            <p className="text-base sm:text-lg lg:text-xl text-blue-100">
               Discover our complete range of stationery and office supplies
             </p>
           </div>
@@ -130,7 +130,7 @@ function ProductsPage() {
       </div>
 
       {/* Main Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filters */}
           <div
@@ -252,18 +252,18 @@ function ProductsPage() {
             </div>
 
             {/* Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
               {sortedProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
                 >
-                  <div className="relative">
-                    {product.image ? (
+                  <div className="relative h-48 bg-gray-200">
+                    {product.image && product.image.trim() !== '' ? (
                       <img
                         src={product.image}
-                        alt={product.title}
-                        className="w-full h-48 object-cover bg-gray-200"
+                        alt={product.title || product.name || 'Product'}
+                        className="w-full h-48 object-cover"
                         onError={(e) => {
                           e.target.style.display = 'none';
                           const fallback = e.target.nextElementSibling;
@@ -271,10 +271,10 @@ function ProductsPage() {
                         }}
                       />
                     ) : null}
-                    <div className="hidden w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0">
-                      <span className="text-gray-400 text-2xl font-bold">{product.title?.charAt(0) || 'P'}</span>
+                    <div className={`${product.image && product.image.trim() !== '' ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0`}>
+                      <span className="text-gray-400 text-2xl font-bold">{(product.title || product.name || 'P').charAt(0).toUpperCase()}</span>
                     </div>
-                    <div className="absolute top-2 left-2">
+                    <div className="absolute top-2 left-2 z-10">
                       <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
                         Best Seller
                       </span>
@@ -310,18 +310,18 @@ function ProductsPage() {
                     </div>
                   </div>
 
-                  <div className="p-4">
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col">
                     <div className="mb-2">
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {product.category}
+                        {product.category || product.category_name || 'General'}
                       </span>
                     </div>
 
-                    <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2">
-                      {product.title}
+                    <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2 text-sm sm:text-base">
+                      {product.title || product.name}
                     </h3>
 
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                    <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 flex-1">
                       {product.description}
                     </p>
 
@@ -341,40 +341,48 @@ function ProductsPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-lg font-bold text-[#002D7A]">
-                        ₹{product.price}
-                      </span>
-                      {product.oldPrice && (
-                        <>
-                          <span className="text-sm text-gray-400 line-through">
-                            ₹{product.oldPrice}
-                          </span>
-                          <span className="text-xs text-green-600 font-medium">
-                            {Math.round(
-                              ((product.oldPrice - product.price) /
-                                product.oldPrice) *
-                                100
-                            )}
-                            % OFF
-                          </span>
-                        </>
-                      )}
-                    </div>
+                    {canSeePrices() ? (
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-lg font-bold text-[#002D7A]">
+                          ₹{product.price}
+                        </span>
+                        {product.oldPrice && (
+                          <>
+                            <span className="text-sm text-gray-400 line-through">
+                              ₹{product.oldPrice}
+                            </span>
+                            <span className="text-xs text-green-600 font-medium">
+                              {Math.round(
+                                ((product.oldPrice - product.price) /
+                                  product.oldPrice) *
+                                  100
+                              )}
+                              % OFF
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mb-4">
+                        <span className="text-sm text-gray-500 italic">
+                          Login to view prices
+                        </span>
+                      </div>
+                    )}
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 mt-auto">
                       <Link
                         to={`/product/${product.id}`}
-                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
-                        <FaEye size={16} />
+                        <FaEye size={14} className="sm:w-4 sm:h-4" />
                         View Details
                       </Link>
                       <button
                         onClick={() => addToCart(product)}
-                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
-                        <FaShoppingCart size={16} />
+                        <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                         Add to Cart
                       </button>
                     </div>

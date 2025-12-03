@@ -52,7 +52,11 @@ export default function SignUpForm() {
         const response: any = await adminsAPI.getAll();
         const admins = response?.items || (Array.isArray(response) ? response : []);
         setAdminExists(admins.length > 0);
-      } catch (e) {
+      } catch (e: any) {
+        // If network error, show message
+        if (e?.isNetworkError || e?.message?.includes('fetch')) {
+          setError(`Cannot connect to server. Please check if API is accessible.`);
+        }
         console.error("Error checking admins:", e);
       } finally {
         setCheckingAdmin(false);
@@ -107,7 +111,20 @@ export default function SignUpForm() {
         setError(response?.error || "Failed to create admin account");
       }
     } catch (err: any) {
-      setError(err?.message || "Failed to create admin account. Please try again.");
+      // Better error messages
+      if (err?.isNetworkError || err?.message?.includes('fetch') || err?.message?.includes('network')) {
+        setError(`Cannot connect to server. Please check if the API server is running at ${import.meta.env.VITE_API_BASE_URL || 'https://shreeram.webbiezinfotech.in/api'}`);
+      } else if (err?.status === 401) {
+        setError("Unauthorized. Please check API key configuration.");
+      } else if (err?.status === 403) {
+        setError(err?.message || "Admin account already exists. Only one admin is allowed.");
+      } else if (err?.status === 409) {
+        setError("Email already registered. Please use a different email.");
+      } else if (err?.message) {
+        setError(err.message);
+      } else {
+        setError("Failed to create admin account. Please check your connection and try again.");
+      }
     } finally {
       setLoading(false);
     }

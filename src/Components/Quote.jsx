@@ -42,19 +42,19 @@ function Quote() {
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-12">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold">
+      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-8 sm:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold">
             <span className="text-white">Get</span> <span className="text-[#FE7F06]">Quote</span>
           </h1>
-          <p className="text-blue-100 mt-3 max-w-2xl mx-auto">
+          <p className="text-sm sm:text-base text-blue-100 mt-2 sm:mt-3 max-w-2xl mx-auto px-4">
             Share your requirements and we will get back with customized wholesale pricing.
           </p>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-10">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 lg:py-10">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 lg:p-8">
           {submitted ? (
             <div className="text-center py-12">
               <h2 className="text-2xl font-semibold text-[#002D7A] mb-2">Request received!</h2>

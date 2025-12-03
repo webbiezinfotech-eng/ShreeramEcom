@@ -18,6 +18,14 @@ function Navbar() {
   const { getCartCount } = useCart();
   const { getWishlistCount } = useWishlist();
 
+  // Simple navigation links
+  const links = [
+    "Home",
+    "All Products",
+    "About",
+    "Contact Us",
+  ];
+
   // Load customer info on mount and when localStorage changes
   useEffect(() => {
     const loadCustomer = () => {
@@ -50,24 +58,37 @@ function Navbar() {
 
     if (currentPath === "/") {
       setActive("Home");
-    } else if (currentPath === "/products") {
+    } else if (currentPath === "/products" || currentPath.startsWith("/product/") || currentPath.startsWith("/category/")) {
       setActive("All Products");
-    } else if (currentPath === "/category/office-supplies") {
-      setActive("Office Supplies");
-    } else if (currentPath === "/category/school-supplies") {
-      setActive("School Supplies");
-    } else if (currentPath === "/category/writing-instruments") {
-      setActive("Writing Instruments");
-    } else if (currentPath === "/category/paper-products") {
-      setActive("Paper Products");
     } else if (currentPath === "/about") {
       setActive("About");
     } else if (currentPath === "/contact") {
-      setActive("Contact");
+      setActive("Contact Us");
     } else {
       setActive("Home");
     }
   }, []);
+
+  // Close sidebar on escape key and prevent body scroll when open
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleEscape);
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
 
   // Handle search
   const handleSearch = (e) => {
@@ -91,168 +112,248 @@ function Navbar() {
     navigate("/");
   };
 
-  const links = [
-    "Home",
-    "All Products",
-    "Office Supplies",
-    "School Supplies",
-    "Writing Instruments",
-    "Paper Products",
-    "About",
-    "Contact",
-  ];
+  // Get path for each link
+  const getLinkPath = (link) => {
+    switch (link) {
+      case "Home":
+        return "/";
+      case "All Products":
+        return "/products";
+      case "About":
+        return "/about";
+      case "Contact Us":
+        return "/contact";
+      default:
+        return "#";
+    }
+  };
 
   return (
     <div>
       {/* Top Bar */}
-      <div className="bg-[#0b1b35] text-white text-sm md:text-[17px] py-2 md:py-4 px-4 md:px-10 lg:px-16 flex-wrap sm:flex justify-between items-center">
-        <div className="flex items-center gap-6">
-          <span className="flex items-center gap-2">
-            <FaPhoneAlt className="text-[#FE7F06]" /> +91 7304044465
+      <div className="bg-[#0b1b35] text-white text-xs sm:text-sm md:text-base lg:text-[17px] py-2 md:py-3 lg:py-4 px-3 sm:px-4 md:px-6 lg:px-10 xl:px-16 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
+        <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
+          <span className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-base">
+            <FaPhoneAlt className="text-[#FE7F06] text-xs sm:text-sm" /> 
+            <span className="whitespace-nowrap">+91 7304044465</span>
           </span>
-          
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm md:text-base">
           {customer ? (
             <>
-              <span className="text-sm">Welcome, {customer.name || customer.email}</span>
-              <button onClick={handleLogout} className="hover:underline">Logout</button>
+              <span className="text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">Welcome, {customer.name || customer.email}</span>
+              <button onClick={handleLogout} className="hover:underline whitespace-nowrap">Logout</button>
             </>
           ) : (
             <>
-              <Link to="/login" className="hover:underline">Login</Link>
-              <Link to="/register" className="hover:underline">Register</Link>
+              <Link to="/login" className="hover:underline whitespace-nowrap">Login</Link>
+              <Link to="/register" className="hover:underline whitespace-nowrap">Register</Link>
             </>
           )}
         </div>
       </div>
 
       {/* Navbar */}
-      <nav className="max-w-auto">
-        <div className="bg-white border-b border-[#0000003d] px-4 md:px-16 py-3 flex items-center justify-between">
-          {/* Logo */}
-          <Link to="/">
-            <img src={logo} alt="shreeram logo" className="h-6 md:h-10" />
-          </Link>
+      <nav className="max-w-auto sticky top-0 z-50 bg-white">
+        <div className="bg-white border-b border-[#0000003d] px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 py-3 sm:py-3 md:py-4">
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            {/* Mobile Menu Button & Logo */}
+            <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+              <button
+                className="md:hidden p-2 -ml-2 text-gray-700 hover:text-[#002D7A] transition-colors"
+                onClick={() => setIsOpen(!isOpen)}
+                aria-label="Toggle menu"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {isOpen ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  )}
+                </svg>
+              </button>
+              <Link to="/" className="flex-shrink-0">
+                <img src={logo} alt="shreeram logo" className="h-7 sm:h-8 md:h-10 w-auto" />
+              </Link>
+            </div>
 
-          {/* Search */}
-          <form onSubmit={handleSearch} className="flex items-center w-1/3 border rounded overflow-hidden">
-            <button type="submit" className="text-black px-4 flex items-center">
-              <AiOutlineSearch />
+            {/* Search - Hidden on mobile, shown on tablet+ */}
+            <form onSubmit={handleSearch} className="hidden sm:flex items-center flex-1 max-w-md mx-4 border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#002D7A] focus-within:border-transparent transition-all">
+              <button type="submit" className="text-gray-500 hover:text-[#002D7A] px-3 sm:px-4 flex items-center flex-shrink-0 transition-colors">
+                <AiOutlineSearch className="text-lg sm:text-xl" />
+              </button>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search products..."
+                className="px-2 sm:px-3 py-2 sm:py-2.5 w-full outline-none text-sm sm:text-base bg-transparent"
+              />
+            </form>
+
+            {/* Icons */}
+            <div className="flex items-center gap-2.5 sm:gap-3 md:gap-4 flex-shrink-0">
+              <Link to="/profile" className="p-2 hover:bg-gray-100 rounded-full transition-colors" title="Profile">
+                <FiUser className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
+              </Link>
+              <Link 
+                to="/profile" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/profile');
+                  setTimeout(() => {
+                    const event = new CustomEvent('switchToWishlistTab');
+                    window.dispatchEvent(event);
+                  }, 100);
+                }}
+                className="relative p-2 hover:bg-gray-100 rounded-full transition-colors"
+                title="Wishlist"
+              >
+                <FaHeart className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 hover:text-red-500 transition-colors" />
+                {getWishlistCount() > 0 && (
+                  <span className="absolute top-0 right-0 bg-red-500 text-white text-[10px] font-semibold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center border-2 border-white">
+                    {getWishlistCount()}
+                  </span>
+                )}
+              </Link>
+              <Link to="/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors" title="Cart">
+                <AiOutlineShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700" />
+                {getCartCount() > 0 && (
+                  <span className="absolute top-0 right-0 bg-[#FE7F06] text-white text-[10px] font-semibold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center border-2 border-white">
+                    {getCartCount()}
+                  </span>
+                )}
+              </Link>
+            </div>
+          </div>
+
+          {/* Mobile Search Bar */}
+          <form onSubmit={handleSearch} className="sm:hidden mt-3 flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#002D7A] focus-within:border-transparent transition-all">
+            <button type="submit" className="text-gray-500 px-3 flex items-center flex-shrink-0">
+              <AiOutlineSearch className="text-lg" />
             </button>
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Shreeram Stationery"
-              className="px-3 py-2 w-full outline-none"
+              placeholder="Search products..."
+              className="px-2 py-2 w-full outline-none text-sm bg-transparent"
             />
           </form>
-
-          {/* Icons */}
-          <div className="flex items-center gap-6">
-            <Link to="/profile" className="flex items-center gap-2">
-              <FiUser size={20} />
-            </Link>
-            <Link 
-              to="/profile" 
-              onClick={(e) => {
-                e.preventDefault();
-                navigate('/profile');
-                // Set wishlist tab active after navigation
-                setTimeout(() => {
-                  const event = new CustomEvent('switchToWishlistTab');
-                  window.dispatchEvent(event);
-                }, 100);
-              }}
-              className="relative"
-              title="Wishlist"
-            >
-              <FaHeart size={20} className="text-gray-700 hover:text-red-500 transition-colors" />
-              {getWishlistCount() > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {getWishlistCount()}
-                </span>
-              )}
-            </Link>
-            <Link to="/cart" className="relative">
-              <AiOutlineShoppingCart size={22} />
-              <span className="absolute -top-2 -right-2 bg-[#FE7F06] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                {getCartCount()}
-              </span>
-            </Link>
-          </div>
         </div>
 
-        {/* Links */}
-        <div className="bg-white shadow">
-          <div className="max-w-auto md:mx-12 px-4 flex gap-6 md:gap-12 py-2 md:py-5">
-            {/* Toggle Button for mobile */}
-            <button
-              className="md:hidden p-2 border rounded"
-              onClick={() => setIsOpen(!isOpen)}
-            >
-              {isOpen ? "✖" : "☰"}
-            </button>
-
-            {/* Links for desktop */}
-            <div className="hidden md:flex gap-6 font-medium">
+        {/* Links - Desktop */}
+        <div className="hidden md:block bg-white border-t border-gray-100">
+          <div className="max-w-7xl mx-auto px-4 md:px-6 lg:px-8">
+            <div className="flex items-center gap-6 lg:gap-8 xl:gap-10 py-3 md:py-4">
               {links.map((link) => (
                 <Link
                   key={link}
-                  to={
-                    link === "Home" ? "/" :
-                    link === "All Products" ? "/products" :
-                    link === "Office Supplies" ? "/category/office-supplies" :
-                    link === "School Supplies" ? "/category/school-supplies" :
-                    link === "Writing Instruments" ? "/category/writing-instruments" :
-                    link === "Paper Products" ? "/category/paper-products" :
-                    link === "About" ? "/about" :
-                    link === "Contact" ? "/contact" :
-                    "#"
-                  }
+                  to={getLinkPath(link)}
                   onClick={() => setActive(link)}
-                  className={`${
-                    active === link ? "text-[#002D7A] underline decoration-2 underline-offset-4 font-bold" : "text-gray-700"
-                  } hover:text-[#002D7A] transition-colors`}
+                  className={`relative whitespace-nowrap font-medium text-sm lg:text-base transition-colors ${
+                    active === link 
+                      ? "text-[#002D7A] font-semibold" 
+                      : "text-gray-700 hover:text-[#002D7A]"
+                  }`}
                 >
                   {link}
+                  {active === link && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#002D7A]"></span>
+                  )}
                 </Link>
               ))}
             </div>
           </div>
-
-          {/* Links for mobile */}
-          {isOpen && (
-            <div className="md:hidden flex flex-col gap-4 px-4 pb-4 font-medium">
-              {links.map((link) => (
-                <Link
-                  key={link}
-                  to={
-                    link === "Home" ? "/" :
-                    link === "All Products" ? "/products" :
-                    link === "Office Supplies" ? "/category/office-supplies" :
-                    link === "School Supplies" ? "/category/school-supplies" :
-                    link === "Writing Instruments" ? "/category/writing-instruments" :
-                    link === "Paper Products" ? "/category/paper-products" :
-                    link === "About" ? "/about" :
-                    link === "Contact" ? "/contact" :
-                    "#"
-                  }
-                  onClick={() => {
-                    setActive(link);
-                    setIsOpen(false);
-                  }}
-                  className={`${
-                    active === link ? "text-[#002D7A] underline decoration-2 underline-offset-4 font-bold" : "text-gray-700"
-                  } hover:text-[#002D7A] transition-colors`}
-                >
-                  {link}
-                </Link>
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* Mobile Sidebar Overlay */}
+        {isOpen && (
+          <>
+            {/* Backdrop */}
+            <div 
+              className="fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity"
+              onClick={() => setIsOpen(false)}
+            ></div>
+            
+            {/* Sidebar */}
+            <div className={`fixed top-0 left-0 h-full w-64 sm:w-72 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out md:hidden ${
+              isOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}>
+              <div className="flex flex-col h-full">
+                {/* Sidebar Header */}
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <img src={logo} alt="shreeram logo" className="h-8 w-auto" />
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                    aria-label="Close menu"
+                  >
+                    <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Sidebar Links */}
+                <div className="flex-1 overflow-y-auto py-4">
+                  {links.map((link) => (
+                    <Link
+                      key={link}
+                      to={getLinkPath(link)}
+                      onClick={() => {
+                        setActive(link);
+                        setIsOpen(false);
+                      }}
+                      className={`block px-6 py-3 text-base font-medium transition-colors ${
+                        active === link
+                          ? "bg-[#002D7A]/10 text-[#002D7A] border-l-4 border-[#002D7A]"
+                          : "text-gray-700 hover:bg-gray-50 hover:text-[#002D7A]"
+                      }`}
+                    >
+                      {link}
+                    </Link>
+                  ))}
+                </div>
+
+                {/* Sidebar Footer */}
+                <div className="p-4 border-t border-gray-200">
+                  {customer ? (
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium text-gray-800 mb-1">Welcome, {customer.name || customer.email}</p>
+                      <button 
+                        onClick={() => {
+                          setIsOpen(false);
+                          handleLogout();
+                        }}
+                        className="text-red-600 hover:text-red-700 font-medium"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <Link 
+                        to="/login" 
+                        onClick={() => setIsOpen(false)}
+                        className="block w-full text-center px-4 py-2 bg-[#002D7A] text-white rounded-lg font-medium hover:bg-[#001C4C] transition-colors"
+                      >
+                        Login
+                      </Link>
+                      <Link 
+                        to="/register" 
+                        onClick={() => setIsOpen(false)}
+                        className="block w-full text-center px-4 py-2 border border-[#002D7A] text-[#002D7A] rounded-lg font-medium hover:bg-[#002D7A]/5 transition-colors"
+                      >
+                        Register
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </nav>
 
       {/* Logout Confirmation Modal */}

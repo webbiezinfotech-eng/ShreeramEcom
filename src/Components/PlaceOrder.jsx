@@ -260,66 +260,67 @@ function PlaceOrder() {
     <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center gap-4">
-            <Link to="/profile" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors">
-              <FaArrowLeft size={20} />
-              Back to Profile
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link to="/profile" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors text-sm sm:text-base">
+              <FaArrowLeft size={16} className="sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline">Back to Profile</span>
+              <span className="sm:hidden">Back</span>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold text-[#002D7A] mt-4">Order Confirmation</h1>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#002D7A] mt-3 sm:mt-4">Order Confirmation</h1>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
         {/* Success Message */}
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-8">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
-              <FaCheckCircle className="text-green-600 text-2xl" />
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 sm:p-6 mb-6 sm:mb-8">
+          <div className="flex items-center flex-col sm:flex-row">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center mb-3 sm:mb-0 sm:mr-4">
+              <FaCheckCircle className="text-green-600 text-xl sm:text-2xl" />
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-green-800">Order Placed Successfully!</h2>
-              <p className="text-green-700 mt-1">
+            <div className="text-center sm:text-left">
+              <h2 className="text-lg sm:text-xl font-semibold text-green-800">Order Placed Successfully!</h2>
+              <p className="text-sm sm:text-base text-green-700 mt-1">
                 Thank you for your order. We've received your order and will process it shortly.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
             {/* Order Details */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold text-gray-800">Order Details</h2>
-                <div className="flex items-center gap-2">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 sm:mb-6 gap-3 sm:gap-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Order Details</h2>
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={handleDownloadInvoice}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-[#002D7A] hover:bg-[#002D7A] hover:text-white border border-[#002D7A] rounded-lg transition-colors"
+                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-[#002D7A] hover:bg-[#002D7A] hover:text-white border border-[#002D7A] rounded-lg transition-colors"
                   >
-                    <FaDownload size={14} />
-                    Invoice
+                    <FaDownload size={12} className="sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden sm:inline">Invoice</span>
                   </button>
                   <button
                     onClick={handlePrintOrder}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors"
+                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors"
                   >
-                    <FaPrint size={14} />
-                    Print
+                    <FaPrint size={12} className="sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden sm:inline">Print</span>
                   </button>
                   <button
                     onClick={handleShareOrder}
-                    className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors"
+                    className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-gray-600 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors"
                   >
-                    <FaShare size={14} />
-                    Share
+                    <FaShare size={12} className="sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden sm:inline">Share</span>
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
                 <div>
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Order Number</h3>
                   <p className="text-lg font-semibold text-[#002D7A]">{orderData.orderId}</p>
@@ -347,15 +348,17 @@ function PlaceOrder() {
                 {orderData.items && orderData.items.length > 0 ? (
                   <div className="space-y-4">
                     {orderData.items.map((item) => (
-                      <div key={item.id} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
-                        <img src={item.image} alt={item.name} className="w-16 h-16 object-cover rounded" />
-                        <div className="flex-1">
-                          <h4 className="font-medium text-gray-800">{item.name}</h4>
-                          <p className="text-sm text-gray-600">{item.category}</p>
-                          <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
+                      <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 border border-gray-200 rounded-lg">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                          <span className="text-gray-400 text-xl sm:text-2xl font-bold">{item.name?.charAt(0) || 'P'}</span>
                         </div>
-                        <div className="text-right">
-                          <p className="font-semibold text-[#002D7A]">₹{(item.price * item.quantity).toFixed(2)}</p>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-gray-800 text-sm sm:text-base truncate">{item.name}</h4>
+                          <p className="text-xs sm:text-sm text-gray-600">{item.category}</p>
+                          <p className="text-xs sm:text-sm text-gray-600">Quantity: {item.quantity}</p>
+                        </div>
+                        <div className="text-left sm:text-right w-full sm:w-auto">
+                          <p className="font-semibold text-[#002D7A] text-sm sm:text-base">₹{(item.price * item.quantity).toFixed(2)}</p>
                           {item.originalPrice && item.originalPrice > item.price && (
                             <>
                               <p className="text-sm text-gray-500 line-through">₹{(item.originalPrice * item.quantity).toFixed(2)}</p>
@@ -436,8 +439,8 @@ function PlaceOrder() {
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             {/* Customer Information */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Customer Information</h2>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Customer Information</h2>
               <div className="space-y-3">
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Name</h3>
@@ -459,9 +462,9 @@ function PlaceOrder() {
             </div>
 
             {/* Billing Address */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FaMapMarkerAlt className="text-[#002D7A]" size={16} />
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
+                <FaMapMarkerAlt className="text-[#002D7A] w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Billing Address
               </h2>
               <div className="text-sm text-gray-600">
@@ -474,9 +477,9 @@ function PlaceOrder() {
             </div>
 
             {/* Shipping Address */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FaTruck className="text-[#002D7A]" size={16} />
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
+                <FaTruck className="text-[#002D7A] w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Shipping Address
               </h2>
               <div className="text-sm text-gray-600">
@@ -489,9 +492,9 @@ function PlaceOrder() {
             </div>
 
             {/* Payment Information */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FaCreditCard className="text-[#002D7A]" size={16} />
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center gap-2">
+                <FaCreditCard className="text-[#002D7A] w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Payment Information
               </h2>
               <div className="space-y-3">
@@ -511,8 +514,8 @@ function PlaceOrder() {
             </div>
 
             {/* Order Summary */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-800 mb-4">Order Summary</h2>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Order Summary</h2>
               <div className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>

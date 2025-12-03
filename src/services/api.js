@@ -1,5 +1,5 @@
-// export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
-export const API_BASE = "http://localhost:8000/api";
+export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
+// export const API_BASE = "http://localhost:8000/api"; // LOCAL DEVELOPMENT
 
 // ✅ Get products
 export async function getProducts(limit = null, page = 1, search = '') {
@@ -387,6 +387,14 @@ export function getLoggedInCustomer() {
     }
   }
   return null;
+}
+
+// ✅ Check if user can see product prices (must be logged in AND approved)
+export function canSeePrices() {
+  const customer = getLoggedInCustomer();
+  if (!customer) return false;
+  // Check if status is 'true' (string) or true (boolean)
+  return customer.status === 'true' || customer.status === true;
 }
 
 export function getLoggedInCustomerId() {

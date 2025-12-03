@@ -1,11 +1,10 @@
 // admin-panel/src/services/api.ts
 
 // ---------- ENV ----------
-const API_BASE_URL: string =
-(import.meta as any).env?.VITE_API_BASE_URL || "http://localhost:8000/api";
-  // (import.meta as any).env?.VITE_API_BASE_URL || "https://shreeram.webbeizinfotech.in/api";
-const API_KEY: string =
-  (import.meta as any).env?.VITE_API_KEY || "SHREERAMstore";
+// PRODUCTION SERVER - Always use server URL
+const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
+// For localhost override, use: (import.meta as any).env?.VITE_API_BASE_URL || "https://shreeram.webbiezinfotech.in/api";
+const API_KEY: string = "SHREERAMstore";
 
 // ---------- Low-level fetch helper ----------
 export async function apiCall(endpoint: string, options: RequestInit = {}) {
@@ -17,15 +16,26 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
   const separator = url.includes('?') ? '&' : '?';
   const finalUrl = url.includes('api_key=') ? url : `${url}${separator}api_key=${API_KEY}`;
 
-  const res = await fetch(finalUrl, {
-    ...options,
-    headers: {
-      // multipart ke case me Content-Type browser set karega; isliye skip
-      ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      "X-API-Key": API_KEY,
-      ...(options.headers || {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(finalUrl, {
+      ...options,
+      headers: {
+        // multipart ke case me Content-Type browser set karega; isliye skip
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        "X-API-Key": API_KEY,
+        ...(options.headers || {}),
+      },
+    });
+  } catch (fetchError: any) {
+    // Network error - server not reachable
+    const error: any = new Error(
+      fetchError.message || `Cannot connect to server. Please check if ${API_BASE_URL} is accessible.`
+    );
+    error.status = 0;
+    error.isNetworkError = true;
+    throw error;
+  }
 
   const ct = res.headers.get("content-type") || "";
   const body = ct.includes("application/json") ? await res.json() : await res.text();

@@ -123,49 +123,52 @@ function Checkout() {
 
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-8">
-          <div className="flex items-center gap-4">
-            <Link to="/cart" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors">
-              <FaArrowLeft size={20} />
-              Back to Cart
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link to="/cart" className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors text-sm sm:text-base">
+              <FaArrowLeft size={16} className="sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline">Back to Cart</span>
+              <span className="sm:hidden">Back</span>
             </Link>
           </div>
-          <h1 className="text-3xl font-bold text-[#002D7A] mt-4">Checkout</h1>
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#002D7A] mt-3 sm:mt-4">Checkout</h1>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
           {/* Order Summary */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Summary</h2>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6">Order Summary</h2>
               
               {/* Items */}
-              <div className="space-y-4 mb-6">
+              <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
                 {cartItems.map((item) => (
-                  <div key={item.id || item.product_id} className="flex items-center gap-4 p-4 border border-gray-100 rounded-lg">
-                    {item.image ? (
-                    <img 
-                        src={item.image} 
-                      alt={item.name} 
-                        className="w-16 h-16 object-cover rounded bg-gray-200"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          const fallback = e.target.nextElementSibling;
-                          if (fallback) fallback.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <div className={`${item.image ? 'hidden' : ''} w-16 h-16 bg-gray-200 rounded flex items-center justify-center`}>
-                      <span className="text-gray-400 text-lg font-bold">{item.name?.charAt(0) || 'P'}</span>
+                  <div key={item.id || item.product_id} className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 border border-gray-100 rounded-lg">
+                    <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                      {item.image && item.image.trim() !== '' ? (
+                        <img 
+                          src={item.image} 
+                          alt={item.name || 'Product'} 
+                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded bg-gray-200 flex-shrink-0"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            const fallback = e.target.nextElementSibling;
+                            if (fallback) fallback.classList.remove('hidden');
+                          }}
+                        />
+                      ) : null}
+                      <div className={`${item.image && item.image.trim() !== '' ? 'hidden' : ''} w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded flex items-center justify-center flex-shrink-0`}>
+                        <span className="text-gray-400 text-lg sm:text-xl font-bold">{(item.name || 'Product').charAt(0).toUpperCase()}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm sm:text-base font-medium text-gray-800 truncate">{item.name}</h3>
+                        <p className="text-xs sm:text-sm text-gray-600">Quantity: {item.quantity || 1}</p>
+                        <p className="text-xs sm:text-sm text-gray-600">Price: ₹{parseFloat(item.price || 0).toFixed(2)}</p>
+                      </div>
                     </div>
-                    <div className="flex-1">
-                      <h3 className="text-base font-medium text-gray-800">{item.name}</h3>
-                      <p className="text-sm text-gray-600">Quantity: {item.quantity || 1}</p>
-                      <p className="text-sm text-gray-600">Price: ₹{parseFloat(item.price || 0).toFixed(2)}</p>
-                    </div>
-                    <span className="text-lg font-semibold text-[#002D7A]">
+                    <span className="text-base sm:text-lg font-semibold text-[#002D7A] w-full sm:w-auto text-right sm:text-left">
                       ₹{((item.price || 0) * (item.quantity || 1)).toFixed(2)}
                     </span>
                   </div>
@@ -221,8 +224,8 @@ function Checkout() {
 
           {/* Sidebar Info */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Order Information</h3>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 sticky top-4 sm:top-6">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4">Order Information</h3>
               
               <div className="space-y-4">
                 <div>

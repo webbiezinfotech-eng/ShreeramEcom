@@ -14,7 +14,7 @@ import {
   FaCheckCircle,
   FaWhatsapp
 } from "react-icons/fa";
-import { getProductById } from "../services/api";
+import { getProductById, canSeePrices, getLoggedInCustomer, getProductsByCategory, getProducts } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import LoginPrompt from "./LoginPrompt";
@@ -25,6 +25,7 @@ function ProductDetail() {
   const { addItemToCart } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
   const [product, setProduct] = useState(null);
+  const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -32,14 +33,44 @@ function ProductDetail() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
-  // Fetch product details
+  // Fetch product details and related products
   useEffect(() => {
     async function fetchProduct() {
       try {
         setLoading(true);
+        const customer = getLoggedInCustomer();
+        // Show login prompt for non-registered users instead of blocking
+        if (!customer) {
+          setShowLoginPrompt(true);
+          setLoading(false);
+          return;
+        }
+        
         const data = await getProductById(id);
         if (data && data.item) {
-          setProduct(data.item);
+          // Construct full image URL if needed
+          let imageUrl = data.item.image;
+          if (imageUrl && !imageUrl.startsWith('http')) {
+            imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+          }
+          setProduct({ ...data.item, image: imageUrl });
+          
+          // Fetch related products from same category
+          if (data.item.category_id) {
+            const related = await getProductsByCategory(data.item.category_id, 8);
+            // Exclude current product and limit to 4
+            const filtered = related
+              .filter(p => p.id !== parseInt(id))
+              .slice(0, 4);
+            setRelatedProducts(filtered);
+          } else {
+            // If no category, fetch recent products
+            const recent = await getProducts(4, 1);
+            const filtered = recent
+              .filter(p => p.id !== parseInt(id))
+              .slice(0, 4);
+            setRelatedProducts(filtered);
+          }
         } else {
           setError("Product not found");
         }
@@ -55,6 +86,29 @@ function ProductDetail() {
       fetchProduct();
     }
   }, [id]);
+
+  // Listen for login events to reload product when user logs in
+  useEffect(() => {
+    const handleLogin = () => {
+      const customer = getLoggedInCustomer();
+      if (customer && showLoginPrompt) {
+        setShowLoginPrompt(false);
+        // Reload the page to fetch product data
+        window.location.reload();
+      }
+    };
+
+    window.addEventListener('customerLogin', handleLogin);
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'customer' && e.newValue) {
+        handleLogin();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('customerLogin', handleLogin);
+    };
+  }, [showLoginPrompt]);
 
   // Check if product is in wishlist
   const isWishlisted = product ? isInWishlist(product.id) : false;
@@ -128,6 +182,22 @@ function ProductDetail() {
     );
   }
 
+  // Don't show error page if login prompt is shown
+  if (showLoginPrompt && !getLoggedInCustomer()) {
+    return (
+      <div className="min-h-screen bg-white">
+        <LoginPrompt
+          isOpen={showLoginPrompt}
+          onClose={() => {
+            setShowLoginPrompt(false);
+            navigate(-1); // Go back when prompt is closed
+          }}
+          message="Please login first to view product details"
+        />
+      </div>
+    );
+  }
+
   if (error || !product) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -146,7 +216,7 @@ function ProductDetail() {
     );
   }
 
-  const productImages = product.image ? [product.image] : [];
+  const productImages = (product.image && product.image.trim() !== '') ? [product.image] : [];
 
   const discountPercentage = product.oldPrice 
     ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
@@ -156,21 +226,21 @@ function ProductDetail() {
     <div className="min-h-screen bg-white">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
             <button
               onClick={() => navigate(-1)}
-              className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors"
+              className="flex items-center gap-2 text-[#002D7A] hover:text-[#001C4C] transition-colors text-sm sm:text-base"
             >
-              <FaArrowLeft size={18} />
+              <FaArrowLeft size={16} className="sm:w-5 sm:h-5" />
               Back
             </button>
-            <div className="text-sm text-gray-500">
+            <div className="text-xs sm:text-sm text-gray-500 flex flex-wrap items-center gap-1 sm:gap-2">
               <Link to="/" className="hover:text-[#002D7A]">Home</Link>
-              <span className="mx-2">/</span>
+              <span>/</span>
               <Link to="/products" className="hover:text-[#002D7A]">Products</Link>
-              <span className="mx-2">/</span>
-              <span className="text-gray-800">{product.name || product.title}</span>
+              <span>/</span>
+              <span className="text-gray-800 truncate max-w-[150px] sm:max-w-none">{product.name || product.title}</span>
             </div>
           </div>
         </div>
@@ -185,47 +255,64 @@ function ProductDetail() {
       )}
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
           {/* Product Images */}
           <div className="space-y-4">
             {/* Main Image */}
-            <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden">
+            <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center">
+              {productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? (
               <img
                 src={productImages[selectedImage]}
-                alt={product.name || product.title}
+                  alt={product.name || product.title || 'Product'}
                 className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    const fallback = e.target.nextElementSibling;
+                    if (fallback) fallback.classList.remove('hidden');
+                  }}
               />
+              ) : null}
+              <div className={`${productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? 'hidden' : ''} w-full h-full flex items-center justify-center`}>
+                <span className="text-gray-400 text-4xl sm:text-5xl font-bold">{(product.name || product.title || 'P').charAt(0).toUpperCase()}</span>
+              </div>
             </div>
 
             {/* Thumbnail Images */}
-            <div className="flex gap-3">
+            {productImages.length > 0 && (
+              <div className="flex gap-2 sm:gap-3 overflow-x-auto">
               {productImages.map((image, index) => (
+                  image && image.trim() !== '' ? (
                 <button
                   key={index}
                   onClick={() => setSelectedImage(index)}
-                  className={`w-20 h-20 rounded-lg overflow-hidden border-2 ${
+                      className={`w-16 h-16 sm:w-20 sm:h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 ${
                     selectedImage === index ? 'border-[#002D7A]' : 'border-gray-200'
                   }`}
                 >
                   <img
                     src={image}
-                    alt={`${product.name} ${index + 1}`}
+                        alt={`${product.name || 'Product'} ${index + 1}`}
                     className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
                   />
                 </button>
+                  ) : null
               ))}
             </div>
+            )}
           </div>
 
           {/* Product Info */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Product Title & Category */}
             <div>
-              <span className="text-sm text-[#002D7A] font-medium uppercase tracking-wide">
+              <span className="text-xs sm:text-sm text-[#002D7A] font-medium uppercase tracking-wide">
                 {product.category_name || 'General'}
               </span>
-              <h1 className="text-3xl font-bold text-gray-900 mt-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
                 {product.name || product.title}
               </h1>
               <div className="flex items-center gap-2 mt-2">
@@ -248,26 +335,39 @@ function ProductDetail() {
             </div>
 
             {/* Price */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-3xl font-bold text-[#002D7A]">
-                  ₹{product.price}
-                </span>
-                {product.oldPrice && (
-                  <>
-                    <span className="text-xl text-gray-400 line-through">
-                      ₹{product.oldPrice}
-                    </span>
-                    <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-sm font-medium">
-                      {discountPercentage}% OFF
-                    </span>
-                  </>
-                )}
+            {canSeePrices() ? (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
+                    ₹{product.price}
+                  </span>
+                  {product.oldPrice && (
+                    <>
+                      <span className="text-lg sm:text-xl text-gray-400 line-through">
+                        ₹{product.oldPrice}
+                      </span>
+                      <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs sm:text-sm font-medium">
+                        {discountPercentage}% OFF
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  SKU: {product.sku || 'N/A'} • Stock: {product.stock || 0} units
+                </p>
               </div>
-              <p className="text-sm text-gray-600">
-                SKU: {product.sku || 'N/A'} • Stock: {product.stock || 0} units
-              </p>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-base sm:text-lg text-gray-500 italic">
+                    Login to view prices
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  SKU: {product.sku || 'N/A'} • Stock: {product.stock || 0} units
+                </p>
+              </div>
+            )}
 
             {/* Description */}
             <div>
@@ -299,9 +399,11 @@ function ProductDetail() {
                     <FaPlus className="text-gray-500" size={12} />
                   </button>
                 </div>
-                <span className="text-sm text-gray-600">
-                  Total: ₹{(product.price * quantity).toFixed(2)}
-                </span>
+                {canSeePrices() && (
+                  <span className="text-sm text-gray-600">
+                    Total: ₹{(product.price * quantity).toFixed(2)}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -343,7 +445,7 @@ function ProductDetail() {
             </div>
 
             {/* Features */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-6 border-t border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 pt-4 sm:pt-6 border-t border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                   <FaTruck className="text-blue-600" size={16} />
@@ -376,22 +478,133 @@ function ProductDetail() {
         </div>
 
         {/* Related Products Section */}
-        <div className="mt-16">
-          <h2 className="text-2xl font-bold text-gray-900 mb-8">Related Products</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* This would be populated with related products from API */}
-            <div className="bg-gray-100 rounded-lg p-4 text-center">
-              <p className="text-gray-500">Related products will be loaded here</p>
+        {relatedProducts.length > 0 && (
+          <div className="mt-8 sm:mt-12 lg:mt-16">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6 lg:mb-8">
+              Related <span className="text-[#FE7F06]">Products</span>
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {relatedProducts.map((relatedProduct) => (
+                <div
+                  key={relatedProduct.id}
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden cursor-pointer group"
+                  onClick={() => navigate(`/product/${relatedProduct.id}`)}
+                >
+                  <div className="relative">
+                    {relatedProduct.image && relatedProduct.image.trim() !== '' ? (
+                      <img
+                        src={relatedProduct.image}
+                        alt={relatedProduct.title || relatedProduct.name || 'Product'}
+                        className="w-full h-48 object-cover bg-gray-200"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const fallback = e.target.nextElementSibling;
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`${relatedProduct.image && relatedProduct.image.trim() !== '' ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0`}>
+                      <span className="text-gray-400 text-2xl font-bold">{(relatedProduct.title || relatedProduct.name || 'P').charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="absolute top-2 left-2">
+                      <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
+                        Related
+                      </span>
+                    </div>
+                    <div className="absolute top-2 right-2">
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (isInWishlist(relatedProduct.id)) {
+                            await removeFromWishlist(null, relatedProduct.id);
+                          } else {
+                            const result = await addToWishlist(relatedProduct.id);
+                            if (result.requiresLogin) {
+                              setShowLoginPrompt(true);
+                            }
+                          }
+                        }}
+                        className={`p-2 rounded-full shadow-md transition-colors ${
+                          isInWishlist(relatedProduct.id)
+                            ? 'bg-red-500 text-white'
+                            : 'bg-white text-gray-400 hover:text-red-500'
+                        }`}
+                        title={isInWishlist(relatedProduct.id) ? "Remove from wishlist" : "Add to wishlist"}
+                      >
+                        <FaHeart size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4 text-left">
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      {relatedProduct.category || relatedProduct.category_name || 'General'}
+                    </span>
+
+                    <h3 className="font-semibold text-gray-800 mt-2 line-clamp-2">
+                      {relatedProduct.title || relatedProduct.name}
+                    </h3>
+
+                    <p className="text-sm text-gray-600 mt-1 line-clamp-2">
+                      {relatedProduct.description}
+                    </p>
+
+                    {canSeePrices() ? (
+                      <div className="flex items-center gap-2 mt-3">
+                        <span className="text-lg font-bold text-[#002D7A]">
+                          ₹{relatedProduct.price}
+                        </span>
+                        {relatedProduct.oldPrice && (
+                          <>
+                            <span className="text-sm text-gray-400 line-through">
+                              ₹{relatedProduct.oldPrice}
+                            </span>
+                            <span className="text-xs text-green-600 font-medium">
+                              {Math.round(
+                                ((relatedProduct.oldPrice - relatedProduct.price) /
+                                  relatedProduct.oldPrice) *
+                                  100
+                              )}
+                              % OFF
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <span className="text-sm text-gray-500 italic">
+                          Login to view prices
+                        </span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/product/${relatedProduct.id}`);
+                      }}
+                      className="mt-4 w-full text-center bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Login Prompt */}
       <LoginPrompt
         isOpen={showLoginPrompt}
-        onClose={() => setShowLoginPrompt(false)}
-        message="Please login first to add products to your wishlist"
+        onClose={() => {
+          setShowLoginPrompt(false);
+          if (!getLoggedInCustomer()) {
+            navigate(-1); // Go back if still not logged in
+          }
+        }}
+        message="Please login first to view product details"
       />
     </div>
   );

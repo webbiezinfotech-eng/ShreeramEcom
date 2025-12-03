@@ -158,7 +158,7 @@ switch ($method) {
                 $data['email'] ?? '',
                 $data['phone'] ?? '',
                 $passwordHash,
-                $data['status'] ?? 'true'
+                'false' // New registrations start with status=false, admin must approve
             ]);
         } else {
             $st = $pdo->prepare("INSERT INTO customers (name, firm, address, email, phone, status, created_at)
@@ -169,7 +169,7 @@ switch ($method) {
                 $data['address'] ?? '',
                 $data['email'] ?? '',
                 $data['phone'] ?? '',
-                $data['status'] ?? 'true'
+                'false' // New registrations start with status=false, admin must approve
             ]);
         }
         

@@ -16,10 +16,12 @@ import ProductsPage from "./Components/ProductsPage.jsx";
 import Quote from "./Components/Quote.jsx";
 import CategoryPage from "./Components/CategoryPage.jsx";
 import ProductDetail from "./Components/ProductDetail.jsx";
+import ScrollToTop from "./Components/ScrollToTop.jsx";
 
 function WebsiteApp() {
   return (
     <div className="">
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={
           <>

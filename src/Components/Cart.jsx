@@ -22,7 +22,6 @@ function Cart() {
     try {
       const item = cartItems.find(item => (item.id === id || item.cart_id === id));
       if (!item) {
-        // Item not found
         return;
       }
       
@@ -30,26 +29,17 @@ function Cart() {
       const newQuantity = Math.max(1, currentQuantity + change);
       
       if (newQuantity !== currentQuantity) {
-        // API expects the cart item ID (from cart table), which is stored as 'id' in our item
-        // The cart item ID is the primary key from the cart table
-        // Use the cart item ID (from cart table)
         const itemId = item.id ? parseInt(item.id) : null;
         if (!itemId || isNaN(itemId)) {
-          // Item ID not found
           return;
         }
         
-        const result = await updateItemQuantity(itemId, newQuantity);
-        if (result && result.success) {
-          // Cart will reload automatically via context
-        } else {
-          // Failed to update quantity
-          // Still try to reload in case of partial success
-          await loadCartItems();
-        }
+        // Update quantity - context will handle optimistic update
+        await updateItemQuantity(itemId, newQuantity);
       }
     } catch (error) {
-      // Error updating quantity
+      // On error, reload to ensure sync
+      await loadCartItems();
     }
   };
 
@@ -121,34 +111,34 @@ function Cart() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white">
-        <div className="md:mx-12 mx-auto px-2 py-6">
-          <div className="flex items-center gap-4 mb-4">
-            <Link to="/" className="flex items-center justify-center w-10 h-10 text-[#002D7A] hover:text-[#001C4C] hover:bg-gray-100 rounded-full transition-colors">
-              <FaArrowLeft size={18} />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <Link to="/" className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-[#002D7A] hover:text-[#001C4C] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+              <FaArrowLeft size={16} className="sm:w-5 sm:h-5" />
             </Link>
-            <h1 className="text-4xl font-bold text-[#002D7A]">Shopping Cart</h1>
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#002D7A]">Shopping Cart</h1>
           </div>
-          <p className="text-[#002D7A] text-lg">{cartItems.length} item(s) in your cart</p>
+          <p className="text-[#002D7A] text-sm sm:text-base md:text-lg">{cartItems.length} item(s) in your cart</p>
         </div>
       </div>
 
-      <div className="md:mx-12 mx-auto px-2 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Cart Items */}
           <div className="lg:w-2/3">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-6">Cart Items</h2>
               
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {cartItems.map((item) => (
-                  <div key={item.id} className="flex flex-col sm:flex-row gap-4 p-5 border border-gray-100 rounded-xl hover:shadow-sm transition-all duration-200 bg-gray-50/50">
+                  <div key={item.id} className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-4 sm:p-5 border border-gray-100 rounded-lg sm:rounded-xl hover:shadow-sm transition-all duration-200 bg-gray-50/50">
                     {/* Product Image */}
-                    <div className="flex-shrink-0">
-                      {item.image || item.image_url ? (
+                    <div className="flex-shrink-0 self-center sm:self-start">
+                      {(item.image && item.image.trim() !== '') || (item.image_url && item.image_url.trim() !== '') ? (
                         <img 
                           src={item.image || item.image_url}
                           alt={item.name || 'Product'}
-                          className="w-20 h-20 object-cover rounded-lg"
+                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             const fallback = e.target.nextElementSibling;
@@ -156,8 +146,8 @@ function Cart() {
                           }}
                         />
                       ) : null}
-                      <div className={`${item.image || item.image_url ? 'hidden' : ''} w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center`}>
-                        <span className="text-gray-400 text-xl font-bold">{(item.name || 'Product').charAt(0)}</span>
+                      <div className={`${((item.image && item.image.trim() !== '') || (item.image_url && item.image_url.trim() !== '')) ? 'hidden' : ''} w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-lg flex items-center justify-center`}>
+                        <span className="text-gray-400 text-lg sm:text-xl font-bold">{(item.name || 'Product').charAt(0).toUpperCase()}</span>
                       </div>
                     </div>
 
@@ -195,9 +185,10 @@ function Cart() {
                         <span className="text-sm font-medium text-gray-600">Quantity:</span>
                         <div className="flex items-center border border-gray-200 rounded-lg bg-white">
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.preventDefault();
-                              updateQuantity(item.cart_id || item.id, -1);
+                              e.stopPropagation();
+                              await updateQuantity(item.cart_id || item.id, -1);
                             }}
                             className="p-2 hover:bg-gray-50 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={parseInt(item.quantity || 1) <= 1}
@@ -209,9 +200,10 @@ function Cart() {
                             {item.quantity}
                           </span>
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.preventDefault();
-                              updateQuantity(item.cart_id || item.id, 1);
+                              e.stopPropagation();
+                              await updateQuantity(item.cart_id || item.id, 1);
                             }}
                             className="p-2 hover:bg-gray-50 transition-colors rounded-r-lg"
                             type="button"
@@ -232,7 +224,7 @@ function Cart() {
 
           {/* Order Summary */}
           <div className="lg:w-1/3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-6">
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 sticky top-4 sm:top-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Summary</h2>
               
               <div className="space-y-4">

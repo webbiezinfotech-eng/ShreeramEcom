@@ -37,8 +37,8 @@ export default function AdminApp() {
         <Route path="signin" element={<SignIn />} />
         <Route path="signup" element={<SignUp />} />
         
-        {/* Redirect /admin to dashboard or signin */}
-        <Route path="/" element={<Navigate to="/admin" replace />} />
+        {/* Redirect /admin to signin (default) */}
+        <Route path="/" element={<Navigate to="/admin/signin" replace />} />
       </Routes>
     </>
   );

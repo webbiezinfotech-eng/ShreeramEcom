@@ -35,8 +35,8 @@ export default function Footer() {
       </div>
 
       {/* Footer Section */}
-      <div className="bg-gray-900 text-white py-10 px-6">
-        <div className="max-w-auto mx-5 md:mx-16 grid grid-cols-1 sm:grid-cols-4 gap-8">
+      <div className="bg-gray-900 text-white py-8 sm:py-10 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
           {/* About */}
           <div>
             <h3 className="text-lg font-semibold mb-3 text-white">
@@ -79,19 +79,6 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Categories */}
-          <div>
-            <h3 className="text-lg font-semibold mb-3 text-white">Categories</h3>
-            <ul className="space-y-2 text-sm">
-              <li><a href="/category/office-supplies" className="text-white hover:text-[#FE7F06] transition-colors block">Office Supplies</a></li>
-              <li><a href="/category/school-supplies" className="text-white hover:text-[#FE7F06] transition-colors block">School Supplies</a></li>
-              <li><a href="/category/writing-instruments" className="text-white hover:text-[#FE7F06] transition-colors block">Writing Instruments</a></li>
-              <li><a href="/category/paper-products" className="text-white hover:text-[#FE7F06] transition-colors block">Paper Products</a></li>
-              <li><a href="/products" className="text-white hover:text-[#FE7F06] transition-colors block">Art & Craft</a></li>
-              <li><a href="/products" className="text-white hover:text-[#FE7F06] transition-colors block">Cutting Tools</a></li>
-            </ul>
-          </div>
-
           {/* Contact */}
           <div>
             <h3 className="text-lg font-semibold mb-3 text-white">Contact Us</h3>
@@ -113,9 +100,9 @@ export default function Footer() {
         </div>
 
         {/* Bottom Footer */}
-        <div className="border-t  mt-8 pt-4 flex flex-col md:flex-row justify-between items-center text-sm ">
-          <p>© 2024 Shreeram Stationery. All rights reserved.</p>
-          <a href="/contact" className="text-white hover:text-[#FE7F06] transition-colors mt-2 md:mt-0">
+        <div className="border-t border-gray-800 mt-6 sm:mt-8 pt-4 sm:pt-6 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0 text-xs sm:text-sm px-4 sm:px-0">
+          <p className="text-center sm:text-left">© 2024 Shreeram Stationery. All rights reserved.</p>
+          <a href="/contact" className="text-white hover:text-[#FE7F06] transition-colors">
             Privacy Policy
           </a>
         </div>

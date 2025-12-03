@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { FaSearch, FaFilter, FaShoppingCart, FaStar, FaHeart, FaEye, FaArrowLeft } from "react-icons/fa";
 import { Link } from "react-router-dom";
-import { getProducts, getProductsByCategory, getCategories } from "../services/api";
+import { getProducts, getProductsByCategory, getCategories, canSeePrices } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import Toast from "./Toast";
@@ -22,6 +22,38 @@ function CategoryPage() {
   const { addItemToCart, getCartCount } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
 
+  // Keyword-based category mapping (define BEFORE using it) - Separate categories
+  const categoryKeywords = {
+    "pens": {
+      keywords: ["pen", "pens", "ballpoint", "gel", "ink", "cello", "camlin", "reynolds", "parker", "pilot", "uniball", "uni-ball", "rotomac", "linc", "flair", "addgel", "pentonic", "butterflow", "octane", "gripper", "techliner", "signo", "v5", "v7", "g2", "bic", "fountain"],
+      name: "Pens"
+    },
+    "pencils": {
+      keywords: ["pencil", "pencils", "natraj", "apsara", "domes", "staedtler", "faber", "castell", "hb", "2b", "4b", "6b", "mechanical", "lead"],
+      name: "Pencils"
+    },
+    "staplers": {
+      keywords: ["stapler", "staplers", "kangaro", "punch", "binding"],
+      name: "Staplers"
+    },
+    "sketchpens": {
+      keywords: ["sketchpen", "sketchpens", "sketch pen", "sketch pens", "marker", "markers", "sketch", "art", "drawing"],
+      name: "Sketchpens"
+    },
+    "office-supplies": {
+      keywords: ["folder", "binder", "clip", "pin", "tack", "office", "file", "organizer", "desk", "calculator", "scissors", "cutter", "tape", "dispenser"],
+      name: "Office Supplies"
+    },
+    "school-supplies": {
+      keywords: ["school", "student", "backpack", "bag", "notebook", "notepad", "eraser", "sharpener", "ruler", "compass", "geometry", "box"],
+      name: "School Supplies"
+    },
+    "paper-products": {
+      keywords: ["paper", "papers", "sheet", "sheets", "notebook", "notepad", "pad", "copy", "a4", "a3", "a5", "legal", "letter", "card", "cardstock"],
+      name: "Paper Products"
+    }
+  };
+
   // Get current category from API data
   const getCurrentCategoryInfo = () => {
     if (!category || category === "all-products") {
@@ -29,6 +61,16 @@ function CategoryPage() {
         title: "All Products",
         description: "Browse our complete range of stationery and office supplies",
         icon: "🛍️",
+        color: "from-[#002D7A] to-[#001C4C]"
+      };
+    }
+    
+    // Check keyword-based categories first
+    if (categoryKeywords[category]) {
+      return {
+        title: categoryKeywords[category].name,
+        description: `Explore our ${categoryKeywords[category].name} collection`,
+        icon: "📦",
         color: "from-[#002D7A] to-[#001C4C]"
       };
     }
@@ -98,7 +140,7 @@ function CategoryPage() {
             // Fetch products for specific category
             prods = await getProductsByCategory(categoryId);
           } else {
-            // Fallback: fetch all products
+            // Check if it's a keyword-based category - fetch all products, filtering will happen in getCategoryProducts
             prods = await getProducts();
           }
         }
@@ -143,21 +185,124 @@ function CategoryPage() {
     return cat ? cat.id : null;
   };
 
+  // Function to check if product matches keyword-based category
+  const matchesKeywordCategory = (product, categorySlug) => {
+    if (!categoryKeywords[categorySlug]) return false;
+    
+    const productName = (product.name || product.title || "").toLowerCase();
+    const productDesc = (product.description || "").toLowerCase();
+    const productCategory = (product.category || product.category_name || "").toLowerCase();
+    const searchText = `${productName} ${productDesc} ${productCategory}`;
+    
+    // Priority matching for specific categories
+    if (categorySlug === "pens") {
+      // Check if name contains "pen" as a word, but NOT "pencil" or "sketch"
+      if ((/\bpen\b/i.test(productName) || /\bpens\b/i.test(productName)) && 
+          !/\bpencil\b/i.test(productName) && !/\bsketch\b/i.test(productName)) {
+        return true;
+      }
+    }
+    
+    if (categorySlug === "pencils") {
+      // Check if name contains "pencil" as a word
+      if (/\bpencil\b/i.test(productName) || /\bpencils\b/i.test(productName)) {
+        return true;
+      }
+    }
+    
+    if (categorySlug === "sketchpens") {
+      // Check if name contains "sketch" or "sketchpen"
+      if (/\bsketch\b/i.test(productName) || /\bsketchpen\b/i.test(productName) || /\bmarker\b/i.test(productName)) {
+        return true;
+      }
+    }
+    
+    // Check keywords
+    return categoryKeywords[categorySlug].keywords.some(keyword => 
+      searchText.includes(keyword.toLowerCase())
+    );
+  };
+
+  // Function to check if category slug contains keywords (for partial matches like "kangaro-staplers")
+  const findKeywordMatch = (categorySlug) => {
+    for (const [key, data] of Object.entries(categoryKeywords)) {
+      if (data.keywords.some(keyword => categorySlug.includes(keyword.toLowerCase()))) {
+        return key;
+      }
+    }
+    return null;
+  };
+
   // ✅ Filter products based on category from API data
   const getCategoryProducts = () => {
     if (!products.length) return [];
-    if (category === "all-products") return products;
+    if (!category || category === "all-products") return products;
     
+    // First try to find category ID from database
     const categoryId = findCategoryId();
     if (categoryId) {
-      return products.filter(product => product.category_id === categoryId);
+      const filtered = products.filter(product => product.category_id === categoryId);
+      if (filtered.length > 0) return filtered;
     }
     
-    // Fallback: filter by category name/slug
-    return products.filter(product => {
-      const catSlug = product.category?.toLowerCase().replace(/\s+/g, '-');
-      return catSlug === category || product.category?.toLowerCase() === category;
+    // Check if it's a predefined keyword category
+    if (categoryKeywords[category]) {
+      const filtered = products.filter(product => matchesKeywordCategory(product, category));
+      if (filtered.length > 0) return filtered;
+    }
+    
+    // Check if category slug contains keywords (e.g., "kangaro-staplers" contains "stapler")
+    const matchedKeywordCategory = findKeywordMatch(category);
+    if (matchedKeywordCategory) {
+      const filtered = products.filter(product => matchesKeywordCategory(product, matchedKeywordCategory));
+      if (filtered.length > 0) return filtered;
+    }
+    
+    // Try to match with database category names (convert category slug back to name)
+    const categoryNameFromSlug = category.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const dbCategoryMatch = categories.find(cat => {
+      const catSlug = (cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-') || '').toLowerCase();
+      const catNameLower = cat.name?.toLowerCase() || '';
+      return catSlug === category || catNameLower === category.toLowerCase() || 
+             catNameLower === categoryNameFromSlug.toLowerCase();
     });
+    
+    if (dbCategoryMatch) {
+      const filtered = products.filter(product => 
+        product.category_id === dbCategoryMatch.id || 
+        (product.category || product.category_name || '').toLowerCase() === dbCategoryMatch.name?.toLowerCase()
+      );
+      if (filtered.length > 0) return filtered;
+    }
+    
+    // Fallback: filter by category name/slug from product data
+    const filtered = products.filter(product => {
+      const productCategory = product.category || product.category_name || "";
+      const catSlug = productCategory.toLowerCase().replace(/\s+/g, '-');
+      const productName = (product.name || product.title || "").toLowerCase();
+      const categoryLower = category.toLowerCase();
+      
+      // Check if category slug matches product category
+      if (catSlug === categoryLower || productCategory.toLowerCase() === categoryLower) {
+        return true;
+      }
+      
+      // Check if product name contains category slug keywords
+      const categoryWords = categoryLower.replace(/-/g, ' ').split(' ');
+      if (categoryWords.some(word => word.length > 2 && productName.includes(word))) {
+        return true;
+      }
+      
+      // Check if product category contains category slug
+      if (productCategory.toLowerCase().includes(categoryLower.replace(/-/g, ' '))) {
+        return true;
+      }
+      
+      return false;
+    });
+    
+    // If no matches found, return all products (better than showing blank page)
+    return filtered.length > 0 ? filtered : products;
   };
 
   const categoryProducts = getCategoryProducts();
@@ -344,17 +489,27 @@ function CategoryPage() {
             </div>
 
             {/* Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
               {sortedProducts.map((product) => (
-                <div key={product.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                <div key={product.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
                   {/* Product Image */}
-                  <div className="relative">
-                    <img
-                      src={product.image}
-                      alt={product.title}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="absolute top-2 left-2">
+                  <div className="relative h-48 bg-gray-200">
+                    {product.image && product.image.trim() !== '' ? (
+                      <img
+                        src={product.image}
+                        alt={product.title || product.name || 'Product'}
+                        className="w-full h-48 object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const fallback = e.target.nextElementSibling;
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`${product.image && product.image.trim() !== '' ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0`}>
+                      <span className="text-gray-400 text-2xl font-bold">{(product.title || product.name || 'P').charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="absolute top-2 left-2 z-10">
                       <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
                         Best Seller
                       </span>
@@ -391,18 +546,18 @@ function CategoryPage() {
                   </div>
 
                   {/* Product Info */}
-                  <div className="p-4">
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col">
                     <div className="mb-2">
                       <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                        {product.category}
+                        {product.category || product.category_name || 'General'}
                       </span>
                     </div>
                     
-                    <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2">
-                      {product.title}
+                    <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2 text-sm sm:text-base">
+                      {product.title || product.name}
                     </h3>
                     
-                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                    <p className="text-xs sm:text-sm text-gray-600 mb-3 line-clamp-2 flex-1">
                       {product.description}
                     </p>
 
@@ -426,32 +581,44 @@ function CategoryPage() {
                     </div>
 
                     {/* Price */}
-                    <div className="flex items-center gap-2 mb-4">
-                      <span className="text-lg font-bold text-[#002D7A]">
-                        ₹{product.price}
-                      </span>
-                      <span className="text-sm text-gray-400 line-through">
-                        ₹{product.oldPrice}
-                      </span>
-                      <span className="text-xs text-green-600 font-medium">
-                        {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
-                      </span>
-                    </div>
+                    {canSeePrices() ? (
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-lg font-bold text-[#002D7A]">
+                          ₹{product.price}
+                        </span>
+                        {product.oldPrice && (
+                          <>
+                            <span className="text-sm text-gray-400 line-through">
+                              ₹{product.oldPrice}
+                            </span>
+                            <span className="text-xs text-green-600 font-medium">
+                              {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="mb-4">
+                        <span className="text-sm text-gray-500 italic">
+                          Login to view prices
+                        </span>
+                      </div>
+                    )}
 
                     {/* Action Buttons */}
-                    <div className="space-y-2">
+                    <div className="space-y-2 mt-auto">
                       <Link
                         to={`/product/${product.id}`}
-                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
-                        <FaEye size={16} />
+                        <FaEye size={14} className="sm:w-4 sm:h-4" />
                         View Details
                       </Link>
                       <button
                         onClick={() => handleAddToCart(product)}
-                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-2"
+                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
                       >
-                        <FaShoppingCart size={16} />
+                        <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                         Add to Cart
                       </button>
                     </div>

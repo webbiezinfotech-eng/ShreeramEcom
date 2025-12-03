@@ -44,21 +44,21 @@ function Hero() {
   return (
     <div>
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-5 sm:py-12">
-        <div className="max-w-auto md:mx-12 sm:py-5 md:py-10 px-4 flex flex-col md:flex-row items-center justify-between gap-8">
+      <section className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-6 sm:py-8 md:py-10 lg:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 md:gap-10">
           {/* Left Content */}
-          <div className="max-w-xl">
-            <h2 className="text-4xl md:text-6xl font-bold leading-tight">
+          <div className="max-w-xl w-full text-center lg:text-left">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold leading-tight">
               Your Trusted <span className="text-[#FE7F06]">Wholesale Partner</span>
             </h2>
-            <p className="mt-4 md:mt-8 text-lg text-gray-100">
+            <p className="mt-3 sm:mt-4 md:mt-6 lg:mt-8 text-sm sm:text-base md:text-lg text-gray-100">
               Discover premium stationery supplies at unbeatable wholesale prices. 
               From office essentials to school supplies, we've got everything your business needs.
             </p>
-            <div className="mt-6 md:mt-8 flex gap-4">
+            <div className="mt-4 sm:mt-6 md:mt-8 flex justify-center lg:justify-start gap-3 sm:gap-4">
               <a
                 href="/products"
-                className="bg-[#FE7F06] hover:bg-[#eb7200] text-white p-2 md:px-6 md:py-3 sm:text-lg rounded-lg font-semibold transition"
+                className="bg-[#FE7F06] hover:bg-[#eb7200] text-white px-4 sm:px-5 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg rounded-lg font-semibold transition whitespace-nowrap"
               >
                 Browse Products →
               </a>
@@ -66,49 +66,49 @@ function Hero() {
           </div>
 
           {/* Right Features */}
-          <div className="grid grid-cols-2 border border-[#ffffff5c] gap-6 md:gap-16 p-8 md:p-16 rounded-2xl shadow-lg bg-[#ffffff38]">
+          <div className="grid grid-cols-2 border border-[#ffffff5c] gap-4 sm:gap-6 md:gap-8 lg:gap-12 xl:gap-16 p-6 sm:p-8 md:p-12 lg:p-16 rounded-xl sm:rounded-2xl shadow-lg bg-[#ffffff38] w-full max-w-md lg:max-w-none">
             <div className="flex flex-col items-center text-center">
-              <BsBoxSeam size={28} />
-              <p className="mt-2 font-semibold">10,000+ Products</p>
+              <BsBoxSeam size={24} className="sm:w-7 sm:h-7 md:w-8 md:h-8" />
+              <p className="mt-1 sm:mt-2 text-xs sm:text-sm md:text-base font-semibold">10,000+ Products</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <FaTruckFast size={28} />
-              <p className="mt-2 font-semibold">Fast Delivery</p>
+              <FaTruckFast size={24} className="sm:w-7 sm:h-7 md:w-8 md:h-8" />
+              <p className="mt-1 sm:mt-2 text-xs sm:text-sm md:text-base font-semibold">Fast Delivery</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <MdOutlineVerified size={28} />
-              <p className="mt-2 font-semibold">Quality Guaranteed</p>
+              <MdOutlineVerified size={24} className="sm:w-7 sm:h-7 md:w-8 md:h-8" />
+              <p className="mt-1 sm:mt-2 text-xs sm:text-sm md:text-base font-semibold">Quality Guaranteed</p>
             </div>
             <div className="flex flex-col items-center text-center">
-              <CiBadgeDollar size={28} />
-              <p className="mt-2 font-semibold">Best Prices</p>
+              <CiBadgeDollar size={24} className="sm:w-7 sm:h-7 md:w-8 md:h-8" />
+              <p className="mt-1 sm:mt-2 text-xs sm:text-sm md:text-base font-semibold">Best Prices</p>
             </div>
           </div>
         </div>
 
         {/* WhatsApp Floating Button */}
         <a
-          href="https://wa.me/91XXXXXXXXXX"
+          href="https://wa.me/917304044465"
           target="_blank"
           rel="noopener noreferrer"
-          className="fixed bottom-6 right-6 bg-green-500 p-3 rounded-full shadow-lg text-white"
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 bg-green-500 p-2.5 sm:p-3 rounded-full shadow-lg text-white hover:bg-green-600 transition-colors z-50"
         >
-          <FaWhatsapp size={26} />
+          <FaWhatsapp size={20} className="sm:w-6 sm:h-6" />
         </a>
       </section>
 
       {/* Categories Section */}
-      <section className="py-12">
-        <div className="max-w-7xl mx-auto px-4 md:py-10 text-center">
-          <h2 className="text-3xl md:text-5xl font-bold leading-tight">
+      <section className="py-8 sm:py-10 md:py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold leading-tight">
             Shop By <span className="text-[#FE7F06]">Category</span>
           </h2>
-          <p className="mt-2">
+          <p className="mt-2 sm:mt-3 text-sm sm:text-base text-gray-600 max-w-2xl mx-auto">
             Explore our comprehensive range of stationery categories, carefully curated for your business needs
           </p>
 
           {/* Category Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 mt-8 md:mt-12">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5 md:gap-6 mt-6 sm:mt-8 md:mt-10 lg:mt-12">
             {categories.length > 0 ? (
               categories.map((cat, index) => {
                 // Use category ID for routing (most reliable)

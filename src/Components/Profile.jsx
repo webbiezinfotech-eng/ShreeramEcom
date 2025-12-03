@@ -304,39 +304,39 @@ function Profile() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-[#002D7A]">My Account</h1>
-          <p className="text-gray-600 mt-2">Manage your account settings and preferences</p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#002D7A]">My Account</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">Manage your account settings and preferences</p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8">
           {/* Sidebar */}
           <div className="lg:w-1/4">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="text-center mb-6">
-                <div className="w-20 h-20 bg-[#002D7A] rounded-full flex items-center justify-center mx-auto mb-4">
-                  <FaUser className="text-white text-2xl" />
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+              <div className="text-center mb-4 sm:mb-6">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-[#002D7A] rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                  <FaUser className="text-white text-xl sm:text-2xl" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-800">{formData.firstName} {formData.lastName}</h3>
-                <p className="text-gray-600">{formData.company}</p>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800">{formData.firstName} {formData.lastName}</h3>
+                <p className="text-xs sm:text-sm text-gray-600">{formData.company}</p>
               </div>
 
-              <nav className="space-y-2">
+              <nav className="space-y-1 sm:space-y-2">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                      className={`w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-left transition-colors text-sm sm:text-base ${
                         activeTab === tab.id
                           ? "bg-[#002D7A] text-white"
                           : "text-gray-700 hover:bg-gray-100"
                       }`}
                     >
-                      <Icon size={18} />
+                      <Icon size={16} className="sm:w-[18px] sm:h-[18px]" />
                       {tab.label}
                     </button>
                   );
@@ -594,13 +594,16 @@ function Profile() {
                         >
                           <FaTrash size={14} />
                         </button>
-                        {item.image ? (
-                          <img src={item.image} alt={item.product_name} className="w-full h-32 object-cover rounded-lg mb-3" />
-                        ) : (
-                          <div className="w-full h-32 bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
-                            <span className="text-gray-400 text-2xl font-bold">{item.product_name?.charAt(0) || 'P'}</span>
-                          </div>
-                        )}
+                        {item.image && item.image.trim() !== '' ? (
+                          <img src={item.image} alt={item.product_name || 'Product'} className="w-full h-32 object-cover rounded-lg mb-3" onError={(e) => {
+                            e.target.style.display = 'none';
+                            const fallback = e.target.nextElementSibling;
+                            if (fallback) fallback.classList.remove('hidden');
+                          }} />
+                        ) : null}
+                        <div className={`${item.image && item.image.trim() !== '' ? 'hidden' : ''} w-full h-32 bg-gray-200 rounded-lg mb-3 flex items-center justify-center`}>
+                          <span className="text-gray-400 text-2xl font-bold">{(item.product_name || 'P').charAt(0).toUpperCase()}</span>
+                        </div>
                         <h3 className="font-semibold text-gray-800 mb-2">{item.product_name}</h3>
                         <p className="text-[#002D7A] font-bold mb-3">₹{parseFloat(item.price || 0).toFixed(2)}</p>
                         <div className="flex gap-2">

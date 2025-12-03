@@ -7,6 +7,8 @@ import {
   TopProduct,
   getMessages,
   Message,
+  customersAPI,
+  Customer,
 } from "../services/api";
 import { useProducts } from "../hooks/useProducts";
 import { useOrders } from "../hooks/useOrders";
@@ -81,6 +83,11 @@ const Dashboard: React.FC = () => {
   const [rcLoading, setRcLoading] = useState(true);
   const [rcError, setRcError] = useState<string | null>(null);
   
+  // All customers (for new registrations)
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [customersError, setCustomersError] = useState<string | null>(null);
+  
   // Alert states
   const [alert, setAlert] = useState<{
     type: 'success' | 'error' | 'warning' | 'info';
@@ -128,7 +135,39 @@ const Dashboard: React.FC = () => {
       .then(setMessages)
       .catch((e) => setMsgError(e?.message || "Failed"))
       .finally(() => setMsgLoading(false));
+    
+    // Fetch all customers for new registrations
+    setCustomersLoading(true);
+    customersAPI.getAll(1, 50)
+      .then((data: any) => {
+        const customers = Array.isArray(data) ? data : (data?.items || []);
+        setAllCustomers(customers);
+      })
+      .catch((e) => setCustomersError(e?.message || "Failed"))
+      .finally(() => setCustomersLoading(false));
   }, []);
+  
+  // Handle customer status update (approve/reject)
+  const handleCustomerStatusUpdate = async (customerId: number, newStatus: 'true' | 'false') => {
+    try {
+      await customersAPI.update(customerId, { status: newStatus });
+      // Refresh customers list
+      const data: any = await customersAPI.getAll(1, 50);
+      const customers = Array.isArray(data) ? data : (data?.items || []);
+      setAllCustomers(customers);
+      setAlert({
+        type: 'success',
+        message: `Customer ${newStatus === 'true' ? 'approved' : 'rejected'} successfully`,
+        isVisible: true
+      });
+    } catch (error: any) {
+      setAlert({
+        type: 'error',
+        message: error?.message || 'Failed to update customer status',
+        isVisible: true
+      });
+    }
+  };
 
   // ---------- KPI metrics (dynamic) ----------
   const { totalOrdersLast30, totalCustomersUnique, revenueThisMonth } =
@@ -208,7 +247,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* KPI Cards (dynamic) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         <DashboardCard
           title="Total Orders"
           count={totalOrdersLast30}
@@ -249,12 +288,97 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Tables stacked FULL WIDTH */}
-      <div className="space-y-8 mb-8">
-        {/* Recent Customers */}
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 mb-6 sm:mb-8">
+        {/* All Customers (New Registrations) */}
+        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl shadow-lg border border-gray-100 w-full">
+          <h2 className="text-base sm:text-lg md:text-xl font-semibold mb-3 sm:mb-4 text-gray-800 flex items-center">
+            <span className="w-1.5 sm:w-2 h-6 sm:h-8 bg-blue-500 rounded-full mr-2 sm:mr-3"></span>
+            All Customers
+          </h2>
+
+          {customersLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-10 bg-gray-100 rounded animate-pulse" />
+              ))}
+            </div>
+          ) : customersError ? (
+            <p className="text-xs sm:text-sm text-red-600">Error: {customersError}</p>
+          ) : (
+            <div className="overflow-x-auto -mx-3 sm:mx-0">
+              <table className="professional-table min-w-full">
+                <thead>
+                  <tr>
+                    <th className="text-xs sm:text-sm">Name</th>
+                    <th className="text-xs sm:text-sm hidden sm:table-cell">Firm</th>
+                    <th className="text-xs sm:text-sm">Email</th>
+                    <th className="text-xs sm:text-sm hidden md:table-cell">Phone</th>
+                    <th className="text-xs sm:text-sm hidden lg:table-cell">Address</th>
+                    <th className="text-xs sm:text-sm">Status</th>
+                    <th className="text-xs sm:text-sm">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allCustomers.slice(0, 10).map((c) => (
+                    <tr key={c.id}>
+                      <td className="font-medium text-gray-800">{c.name}</td>
+                      <td className="text-gray-600">{c.firm || "-"}</td>
+                      <td className="text-gray-600 text-sm">{c.email}</td>
+                      <td className="text-gray-600 text-sm">{c.phone || "-"}</td>
+                      <td className="text-gray-600 text-sm max-w-xs truncate">{c.address || "-"}</td>
+                      <td>
+                        <span className={String(c.status) === 'true' ? "status-badge status-badge-success" : "status-badge status-badge-warning"}>
+                          {String(c.status) === 'true' ? 'Approved' : 'Pending'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex gap-2">
+                          {String(c.status) !== 'true' && (
+                            <button
+                              onClick={() => handleCustomerStatusUpdate(c.id, 'true')}
+                              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {String(c.status) === 'true' ? (
+                            <button
+                              onClick={() => handleCustomerStatusUpdate(c.id, 'false')}
+                              className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                            >
+                              Reject
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleCustomerStatusUpdate(c.id, 'false')}
+                              className="px-3 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500 transition-colors"
+                              disabled
+                            >
+                              Reject
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {allCustomers.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center text-gray-500 py-6">
+                        No customers found
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Recent Customers (with orders) */}
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100 w-full">
           <h2 className="text-lg sm:text-xl font-semibold mb-4 text-gray-800 flex items-center">
-            <span className="w-2 h-8 bg-blue-500 rounded-full mr-3"></span>
-            Recent Customers
+            <span className="w-2 h-8 bg-green-500 rounded-full mr-3"></span>
+            Recent Customers (With Orders)
           </h2>
 
           {rcLoading ? (

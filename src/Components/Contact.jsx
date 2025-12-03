@@ -95,13 +95,13 @@ function Contact() {
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-20">
+      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-12 sm:py-16 lg:py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-4 sm:mb-6">
               <span className="text-white">Contact</span> <span className="text-[#FE7F06]">Us</span>
             </h1>
-            <p className="text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto">
+            <p className="text-base sm:text-xl md:text-2xl text-blue-100 max-w-3xl mx-auto px-4">
               Get in touch with us for any inquiries, orders, or support
             </p>
           </div>
@@ -109,9 +109,9 @@ function Contact() {
       </div>
 
       {/* Contact Information & Form */}
-      <div className="py-16 bg-white">
+      <div className="py-8 sm:py-12 lg:py-16 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 sm:gap-10 lg:gap-12">
             {/* Contact Information */}
             <div className="space-y-8">
               <div>
@@ -182,8 +182,8 @@ function Contact() {
             </div>
 
             {/* Contact Form */}
-            <div className="bg-gray-50 rounded-2xl p-8">
-              <h3 className="text-2xl font-bold text-[#002D7A] mb-6">Send us a Message</h3>
+            <div className="bg-gray-50 rounded-xl sm:rounded-2xl p-6 sm:p-8">
+              <h3 className="text-xl sm:text-2xl font-bold text-[#002D7A] mb-4 sm:mb-6">Send us a Message</h3>
               
               {isSubmitted && (
                 <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-6">

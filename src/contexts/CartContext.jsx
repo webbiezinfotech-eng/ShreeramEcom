@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getCartItems, addToCart, updateCartItem, clearCart, getSessionId } from '../services/api';
 
 // API Base URL for image construction (should match api.js)
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+// const API_BASE_URL = "http://localhost:8000"; // LOCAL DEVELOPMENT
 
 const CartContext = createContext();
 
@@ -49,7 +50,7 @@ export const CartProvider = ({ children }) => {
               imageUrl = imagePath;
             } else {
               // Image path from DB is like "api/uploads/filename.jpg"
-              // Need to construct: "http://localhost:8000/api/uploads/filename.jpg"
+              // Construct full URL: "https://shreeram.webbiezinfotech.in/api/uploads/filename.jpg"
               let cleanPath = imagePath.trim();
               if (cleanPath.startsWith('/')) {
                 cleanPath = cleanPath.slice(1);
@@ -179,6 +180,20 @@ export const CartProvider = ({ children }) => {
   // Update cart item quantity
   const updateItemQuantity = async (itemId, quantity) => {
     try {
+      // Optimistically update UI first
+      setCartItems(prevItems => {
+        return prevItems.map(item => {
+          if (item.id === itemId || item.cart_id === itemId) {
+            return {
+              ...item,
+              quantity: quantity,
+              subtotal: parseFloat(item.price || 0) * quantity
+            };
+          }
+          return item;
+        });
+      });
+
       // Ensure we have session ID
       let currentSessionId = sessionId;
       if (!currentSessionId) {
@@ -198,13 +213,18 @@ export const CartProvider = ({ children }) => {
       
       const response = await updateCartItem(itemId, quantity, currentCustomerId, currentSessionId);
       if (response.ok) {
-        await loadCartItems(); // Reload cart items
+        // Only reload if we need to sync with server (e.g., stock validation)
+        // For now, optimistic update is enough
         return { success: true };
       } else {
+        // If update failed, reload to sync with server
+        await loadCartItems();
         return { success: false, error: response.error || 'Failed to update quantity' };
       }
     } catch (error) {
       console.error('Error updating cart item:', error);
+      // On error, reload to ensure sync
+      await loadCartItems();
       return { success: false, error: error.message || 'Failed to update quantity' };
     }
   };
