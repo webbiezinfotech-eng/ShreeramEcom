@@ -113,7 +113,7 @@ export default function SignUpForm() {
     } catch (err: any) {
       // Better error messages
       if (err?.isNetworkError || err?.message?.includes('fetch') || err?.message?.includes('network')) {
-        setError(`Cannot connect to server. Please check if the API server is running at ${import.meta.env.VITE_API_BASE_URL || 'https://shreeram.webbiezinfotech.in/api'}`);
+        setError(`Cannot connect to server. Please check if the API server is running at ${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'}`);
       } else if (err?.status === 401) {
         setError("Unauthorized. Please check API key configuration.");
       } else if (err?.status === 403) {

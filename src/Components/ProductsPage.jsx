@@ -6,6 +6,8 @@ import {
   FaStar,
   FaHeart,
   FaEye,
+  FaPlus,
+  FaMinus,
 } from "react-icons/fa";
 import { Link, useSearchParams } from "react-router-dom";
 import { getProducts, getCategories, canSeePrices } from "../services/api";
@@ -27,6 +29,17 @@ function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ isOpen: false, message: "", type: "success" });
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [quantities, setQuantities] = useState(() => {
+    // Restore quantities from localStorage
+    const saved = localStorage.getItem('products_page_quantities');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [addingToCart, setAddingToCart] = useState({}); // Track which product is being added
+  const [showQuantitySelector, setShowQuantitySelector] = useState(() => {
+    // Restore quantity selector visibility from localStorage
+    const saved = localStorage.getItem('products_page_quantity_selectors');
+    return saved ? JSON.parse(saved) : {};
+  });
   const { addItemToCart, getCartCount } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
 
@@ -43,16 +56,22 @@ function ProductsPage() {
     fetchCategories();
   }, []);
 
-  // ✅ Fetch products from backend
+  // ✅ Fetch products from backend with debouncing for search
   useEffect(() => {
-    async function fetchData() {
+    const timeoutId = setTimeout(async () => {
       setLoading(true);
-      const data = await getProducts(null, 1, initialSearch);
-      setProducts(data || []);
-      setLoading(false);
-    }
-    fetchData();
-  }, [initialSearch]);
+      try {
+        const data = await getProducts(null, 1, searchTerm);
+        setProducts(data || []);
+      } catch (error) {
+        // Silently handle error
+      } finally {
+        setLoading(false);
+      }
+    }, searchTerm ? 300 : 0); // 300ms debounce for search, no delay for initial load
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, initialSearch]);
 
   // ✅ Filter products
   const filteredProducts = products.filter((product) => {
@@ -95,23 +114,91 @@ function ProductsPage() {
     }
   });
 
+  // Handle quantity change
+  const handleQuantityChange = (productId, change) => {
+    setQuantities(prev => {
+      const currentQty = prev[productId] || 1;
+      const newQty = Math.max(1, currentQty + change);
+      const updated = { ...prev, [productId]: newQty };
+      // Persist to localStorage
+      localStorage.setItem('products_page_quantities', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Handle direct quantity input
+  const handleQuantityInput = (productId, value) => {
+    const numValue = parseInt(value) || 1;
+    const validQty = Math.max(1, numValue);
+    setQuantities(prev => {
+      const updated = { ...prev, [productId]: validQty };
+      // Persist to localStorage
+      localStorage.setItem('products_page_quantities', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Handle add to cart button click - show quantity selector
+  const handleAddToCartClick = (productId) => {
+    // Show quantity selector for this product
+    setShowQuantitySelector(prev => {
+      const updated = { ...prev, [productId]: true };
+      // Persist to localStorage
+      localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   // ✅ Cart functions
-  const addToCart = async (product) => {
-    const result = await addItemToCart(product.id, 1);
-    if (result.success) {
-      setToast({ isOpen: true, message: `${product.title} added to cart!`, type: "success" });
-    } else {
-      setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
+  const addToCart = async (product, e) => {
+    if (e) {
+      e.preventDefault(); // Prevent any form submission or page refresh
+      e.stopPropagation();
+    }
+    
+    const quantity = quantities[product.id] || 1;
+    setAddingToCart(prev => ({ ...prev, [product.id]: true }));
+    
+    try {
+      const result = await addItemToCart(product.id, quantity);
+      if (result.success) {
+        // Notification will be shown by CartContext
+        setToast({ isOpen: true, message: `${product.title || product.name} (${quantity} qty) added to cart!`, type: "success" });
+        // Don't reset quantity - keep the selected quantity
+        // Keep quantity selector visible
+        setShowQuantitySelector(prev => {
+          const updated = { ...prev, [product.id]: true };
+          // Persist to localStorage
+          localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+          return updated;
+        });
+      } else {
+        if (result.requiresLogin) {
+          setShowLoginPrompt(true);
+        } else {
+          setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
+        }
+      }
+    } catch (error) {
+      setToast({ isOpen: true, message: 'Failed to add to cart', type: "error" });
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [product.id]: false }));
     }
   };
 
-  if (loading) {
-    return (
-      <div className="text-center py-20 text-gray-600 text-lg">
-        Loading products...
+  // Skeleton loader component
+  const ProductSkeleton = () => (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden animate-pulse">
+      <div className="h-48 bg-gray-200"></div>
+      <div className="p-4 space-y-3">
+        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+        <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+        <div className="h-4 bg-gray-200 rounded w-full"></div>
+        <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+        <div className="h-10 bg-gray-200 rounded"></div>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-white">
@@ -253,7 +340,13 @@ function ProductsPage() {
 
             {/* Products Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-              {sortedProducts.map((product) => (
+              {loading && sortedProducts.length === 0 ? (
+                // Show skeleton loaders while loading (only if no products yet)
+                Array.from({ length: 6 }).map((_, index) => (
+                  <ProductSkeleton key={`skeleton-${index}`} />
+                ))
+              ) : sortedProducts.length > 0 ? (
+                sortedProducts.map((product) => (
                 <div
                   key={product.id}
                   className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
@@ -263,7 +356,7 @@ function ProductsPage() {
                       <img
                         src={product.image}
                         alt={product.title || product.name || 'Product'}
-                        className="w-full h-48 object-cover"
+                        className={`w-full h-48 object-cover ${product.status !== 'active' ? 'opacity-50' : ''}`}
                         onError={(e) => {
                           e.target.style.display = 'none';
                           const fallback = e.target.nextElementSibling;
@@ -271,13 +364,27 @@ function ProductsPage() {
                         }}
                       />
                     ) : null}
-                    <div className={`${product.image && product.image.trim() !== '' ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0`}>
+                    <div className={`${product.image && product.image.trim() !== '' ? 'hidden' : ''} w-full h-48 bg-gray-200 flex items-center justify-center absolute inset-0 ${product.status !== 'active' ? 'opacity-50' : ''}`}>
                       <span className="text-gray-400 text-2xl font-bold">{(product.title || product.name || 'P').charAt(0).toUpperCase()}</span>
                     </div>
+                    {/* Out of Stock Overlay */}
+                    {product.status !== 'active' && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
+                        <span className="bg-red-600 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-lg">
+                          OUT OF STOCK
+                        </span>
+                      </div>
+                    )}
                     <div className="absolute top-2 left-2 z-10">
-                      <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
-                        Best Seller
-                      </span>
+                      {product.status === 'active' ? (
+                        <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
+                          Best Seller
+                        </span>
+                      ) : (
+                        <span className="bg-red-600 text-white text-xs font-medium px-2 py-1 rounded">
+                          Out of Stock
+                        </span>
+                      )}
                     </div>
                     <div className="absolute top-2 right-2 flex flex-col gap-1">
                       <button
@@ -378,21 +485,91 @@ function ProductsPage() {
                         <FaEye size={14} className="sm:w-4 sm:h-4" />
                         View Details
                       </Link>
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
-                      >
-                        <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
-                        Add to Cart
-                      </button>
+                      
+                      {/* Quantity Selector & Add to Cart */}
+                      {canSeePrices() && product.status === 'active' ? (
+                        <div>
+                          {showQuantitySelector[product.id] ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center border border-gray-300 rounded-lg bg-white flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleQuantityChange(product.id, -1);
+                                  }}
+                                  className="p-1.5 hover:bg-gray-50 transition-colors"
+                                  disabled={(quantities[product.id] || 1) <= 1}
+                                >
+                                  <FaMinus className="text-gray-500" size={10} />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={quantities[product.id] || 1}
+                                  onChange={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleQuantityInput(product.id, e.target.value);
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="w-10 text-center border-0 focus:outline-none focus:ring-0 text-xs font-medium py-1"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleQuantityChange(product.id, 1);
+                                  }}
+                                  className="p-1.5 hover:bg-gray-50 transition-colors"
+                                >
+                                  <FaPlus className="text-gray-500" size={10} />
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => addToCart(product, e)}
+                                disabled={addingToCart[product.id]}
+                                className="flex-1 bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
+                                {addingToCart[product.id] ? 'Adding...' : 'Add to Cart'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleAddToCartClick(product.id);
+                              }}
+                              className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                            >
+                              <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
+                              Add to Cart
+                            </button>
+                          )}
+                        </div>
+                      ) : product.status !== 'active' ? (
+                        <div className="w-full bg-red-100 border border-red-300 text-red-700 font-medium py-2 px-3 sm:px-4 rounded-lg text-sm sm:text-base text-center">
+                          Out of Stock
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
-              ))}
+              ))
+              ) : null}
             </div>
 
             {/* No Results */}
-            {sortedProducts.length === 0 && (
+            {!loading && sortedProducts.length === 0 && (
               <div className="text-center py-12">
                 <div className="text-gray-400 mb-4">
                   <FaSearch size={48} className="mx-auto" />

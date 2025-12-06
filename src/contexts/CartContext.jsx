@@ -2,8 +2,10 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { getCartItems, addToCart, updateCartItem, clearCart, getSessionId } from '../services/api';
 
 // API Base URL for image construction (should match api.js)
-const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
-// const API_BASE_URL = "http://localhost:8000"; // LOCAL DEVELOPMENT
+// PRODUCTION SERVER
+// const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+// LOCAL DEVELOPMENT
+const API_BASE_URL = "http://localhost:8000";
 
 const CartContext = createContext();
 
@@ -20,6 +22,7 @@ export const CartProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [customerId, setCustomerId] = useState(null);
   const [sessionId, setSessionId] = useState(null);
+  const [showCartNotification, setShowCartNotification] = useState(false);
 
   // Initialize session ID and customer ID from localStorage
   useEffect(() => {
@@ -31,6 +34,8 @@ export const CartProvider = ({ children }) => {
     if (storedCustomerId) {
       setCustomerId(storedCustomerId);
     }
+    
+    // Notification will be restored when cart items are loaded
   }, []);
 
   // Load cart items
@@ -72,11 +77,23 @@ export const CartProvider = ({ children }) => {
             stock: parseInt(item.stock || 0),
             status: item.status || 'active',
             image: imageUrl,
-            // Calculate subtotal if not provided
-            subtotal: parseFloat(item.wholesale_rate || item.price || 0) * parseInt(item.quantity || 1)
+            // Calculate subtotal: quantity (packs) × items_per_pack × price_per_item
+            items_per_pack: parseInt(item.items_per_pack || 1),
+            subtotal: parseFloat(item.wholesale_rate || item.price || 0) * parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1)
           };
         });
         setCartItems(mappedItems);
+        
+        // Always show notification if cart has items (unless user manually closed it)
+        // This ensures notification persists across navigation
+        if (mappedItems.length > 0) {
+          const savedNotificationState = localStorage.getItem('show_cart_notification');
+          // If notification was never manually closed, or if it was shown before, show it
+          if (savedNotificationState !== 'false') {
+            setShowCartNotification(true);
+            localStorage.setItem('show_cart_notification', 'true');
+          }
+        }
         
         // Update session ID if returned
         if (response.session_id) {
@@ -167,6 +184,11 @@ export const CartProvider = ({ children }) => {
           setSessionId(response.session_id);
         }
         await loadCartItems(); // Reload cart items
+        
+        // Show cart notification (will persist until order placed or cart cleared)
+        setShowCartNotification(true);
+        localStorage.setItem('show_cart_notification', 'true');
+        
         return { success: true };
       } else {
         return { success: false, error: response.error || 'Failed to add to cart' };
@@ -182,12 +204,18 @@ export const CartProvider = ({ children }) => {
     try {
       // Optimistically update UI first
       setCartItems(prevItems => {
+        // If quantity is 0, remove the item from cart
+        if (quantity === 0) {
+          return prevItems.filter(item => item.id !== itemId && item.cart_id !== itemId);
+        }
+        
+        // Otherwise, update the quantity
         return prevItems.map(item => {
           if (item.id === itemId || item.cart_id === itemId) {
             return {
               ...item,
               quantity: quantity,
-              subtotal: parseFloat(item.price || 0) * quantity
+              subtotal: parseFloat(item.price || 0) * quantity * parseInt(item.items_per_pack || 1)
             };
           }
           return item;
@@ -213,8 +241,10 @@ export const CartProvider = ({ children }) => {
       
       const response = await updateCartItem(itemId, quantity, currentCustomerId, currentSessionId);
       if (response.ok) {
-        // Only reload if we need to sync with server (e.g., stock validation)
-        // For now, optimistic update is enough
+        // If item was removed (quantity 0), reload to ensure sync
+        if (quantity === 0) {
+          await loadCartItems();
+        }
         return { success: true };
       } else {
         // If update failed, reload to sync with server
@@ -231,7 +261,14 @@ export const CartProvider = ({ children }) => {
 
   // Remove item from cart
   const removeItemFromCart = async (itemId) => {
-    return await updateItemQuantity(itemId, 0);
+    const result = await updateItemQuantity(itemId, 0);
+    // If cart becomes empty after removal, hide notification
+    setTimeout(() => {
+      if (cartItems.length <= 1) {
+        // This will be handled by the useEffect that watches cartItems.length
+      }
+    }, 100);
+    return result;
   };
 
   // Clear entire cart
@@ -240,6 +277,9 @@ export const CartProvider = ({ children }) => {
       const response = await clearCart(customerId, sessionId);
       if (response.ok) {
         setCartItems([]);
+        // Hide notification when cart is cleared (order placed)
+        setShowCartNotification(false);
+        localStorage.removeItem('show_cart_notification');
         return { success: true };
       } else {
         return { success: false, error: response.error };
@@ -255,9 +295,12 @@ export const CartProvider = ({ children }) => {
     return cartItems.length;
   };
 
-  // Get cart total
+  // Get cart total (quantity × items_per_pack × price)
   const getCartTotal = () => {
-    return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
+    return cartItems.reduce((total, item) => {
+      const itemsPerPack = parseInt(item.items_per_pack || 1);
+      return total + (item.price * item.quantity * itemsPerPack);
+    }, 0);
   };
 
   // Load cart items when component mounts or customer changes
@@ -272,6 +315,7 @@ export const CartProvider = ({ children }) => {
     const handleLogout = () => {
       setCartItems([]);
       setCustomerId(null);
+      setShowCartNotification(false); // Hide notification on logout
       // Generate new session ID for guest user
       const newSessionId = 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
       setSessionId(newSessionId);
@@ -283,6 +327,41 @@ export const CartProvider = ({ children }) => {
       window.removeEventListener('customerLogout', handleLogout);
     };
   }, []);
+
+  // Persist notification state to localStorage
+  useEffect(() => {
+    if (showCartNotification && cartItems.length > 0) {
+      localStorage.setItem('show_cart_notification', 'true');
+    } else if (!showCartNotification && cartItems.length > 0) {
+      // User manually closed it - mark as 'false' but don't remove
+      // So it can be restored if needed
+      localStorage.setItem('show_cart_notification', 'false');
+    }
+  }, [showCartNotification, cartItems.length]);
+
+  // Hide notification only when cart is completely empty (order placed or cart cleared)
+  // Show notification if cart has items and it was previously shown
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      // Cart is empty - hide notification permanently
+      setShowCartNotification(false);
+      localStorage.removeItem('show_cart_notification');
+    } else {
+      // Cart has items - always show notification unless user manually closed it
+      const savedNotificationState = localStorage.getItem('show_cart_notification');
+      if (savedNotificationState === 'true') {
+        // Notification was shown before - keep it visible
+        if (!showCartNotification) {
+          setShowCartNotification(true);
+        }
+      } else if (savedNotificationState === null || savedNotificationState === '') {
+        // No saved state - show notification (first time adding items)
+        setShowCartNotification(true);
+        localStorage.setItem('show_cart_notification', 'true');
+      }
+      // If savedNotificationState === 'false', user manually closed it - don't show
+    }
+  }, [cartItems.length]);
 
   const value = {
     cartItems,
@@ -296,7 +375,9 @@ export const CartProvider = ({ children }) => {
     removeItemFromCart,
     clearCartItems,
     getCartCount,
-    getCartTotal
+    getCartTotal,
+    showCartNotification,
+    setShowCartNotification
   };
 
   return (

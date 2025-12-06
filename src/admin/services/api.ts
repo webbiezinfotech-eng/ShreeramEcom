@@ -1,9 +1,10 @@
 // admin-panel/src/services/api.ts
 
 // ---------- ENV ----------
-// PRODUCTION SERVER - Always use server URL
-const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
-// For localhost override, use: (import.meta as any).env?.VITE_API_BASE_URL || "https://shreeram.webbiezinfotech.in/api";
+// PRODUCTION SERVER
+// const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
+// LOCAL DEVELOPMENT
+const API_BASE_URL: string = "http://localhost:8000/api";
 const API_KEY: string = "SHREERAMstore";
 
 // ---------- Low-level fetch helper ----------

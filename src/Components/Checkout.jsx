@@ -21,9 +21,9 @@ function Checkout() {
   const handlePlaceOrder = async () => {
     setOrderError("");
     
-    // Enforce ₹5,000 minimum order
-    if (getSubtotal() < 5000) {
-      setOrderError("Minimum order amount is ₹5,000. Please add more items to proceed.");
+    // Enforce ₹1,000 minimum order
+    if (getSubtotal() < 1000) {
+      setOrderError("Minimum order amount is ₹1,000. Please add more items to proceed.");
       return;
     }
     

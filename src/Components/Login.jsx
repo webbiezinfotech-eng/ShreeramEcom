@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaEye, FaEyeSlash, FaUser, FaLock } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaUser, FaLock, FaTimes, FaExclamationTriangle } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 import { loginCustomer } from "../services/api";
 import ForgotPassword from "./ForgotPassword";
@@ -15,6 +15,7 @@ function Login() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showInactivePopup, setShowInactivePopup] = useState(false);
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -95,7 +96,13 @@ function Login() {
           // Redirect to home
           navigate("/");
         } else {
-          setSubmitError(result.error || "Login failed. Please check your credentials.");
+          // Check if account is inactive
+          if (result.inactive || (result.error && (result.error.includes('contact') || result.error.includes('Shreeram Store')))) {
+            setShowInactivePopup(true);
+            setSubmitError("");
+          } else {
+            setSubmitError(result.error || "Login failed. Please check your credentials.");
+          }
         }
       } catch (error) {
         setSubmitError("An error occurred. Please try again.");
@@ -280,6 +287,60 @@ function Login() {
          isOpen={showForgotPassword} 
          onClose={() => setShowForgotPassword(false)} 
        />
+
+       {/* Inactive Account Popup */}
+       {showInactivePopup && (
+         <div 
+           className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50"
+           onClick={(e) => {
+             if (e.target === e.currentTarget) {
+               setShowInactivePopup(false);
+             }
+           }}
+         >
+           <div 
+             className="bg-white rounded-xl shadow-xl p-4 sm:p-6 max-w-md w-full mx-4 animate-fade-in"
+             onClick={(e) => e.stopPropagation()}
+           >
+             <div className="flex items-center justify-between mb-4">
+               <div className="flex items-center gap-3">
+                 <div className="bg-orange-100 p-2 rounded-full">
+                   <FaExclamationTriangle className="text-orange-600 text-xl" />
+                 </div>
+                 <h3 className="text-lg sm:text-xl font-bold text-[#002D7A]">Account Access Restricted</h3>
+               </div>
+               <button
+                 onClick={() => setShowInactivePopup(false)}
+                 className="text-gray-400 hover:text-gray-600 transition-colors"
+               >
+                 <FaTimes size={18} className="sm:w-5 sm:h-5" />
+               </button>
+             </div>
+             <p className="text-sm sm:text-base text-gray-600 mb-4 sm:mb-6">
+               Please contact Shreeram Store for view products.
+             </p>
+             <div className="bg-gray-50 rounded-lg p-3 mb-4">
+               <p className="text-xs sm:text-sm text-gray-700 font-medium mb-1">Contact Information:</p>
+               <p className="text-xs sm:text-sm text-gray-600">Email: Shreeramgeneralstore.20@gmail.com</p>
+               <p className="text-xs sm:text-sm text-gray-600">Phone: +91 7304044465</p>
+             </div>
+             <div className="flex gap-2 sm:gap-3">
+               <button
+                 onClick={() => setShowInactivePopup(false)}
+                 className="flex-1 px-3 sm:px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-gray-700 text-sm sm:text-base"
+               >
+                 Close
+               </button>
+               <a
+                 href="mailto:Shreeramgeneralstore.20@gmail.com"
+                 className="flex-1 px-3 sm:px-4 py-2 rounded-lg bg-[#002D7A] text-white hover:bg-[#001C4C] transition-colors flex items-center justify-center gap-2 text-sm sm:text-base text-center"
+               >
+                 Contact Admin
+               </a>
+             </div>
+           </div>
+         </div>
+       )}
 
      </div>
    );

@@ -99,7 +99,10 @@ try {
         $imageUrl = $row['image'];
         // Check if URL starts with http (PHP 7.x compatible)
         if (strpos($imageUrl, 'http') !== 0) {
-          $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
+          // LOCAL DEVELOPMENT
+          $imageUrl = 'http://localhost:8000/' . ltrim($imageUrl, '/');
+          // PRODUCTION SERVER
+          // $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
         }
       }
 

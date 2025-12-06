@@ -51,7 +51,10 @@ function ProductDetail() {
           // Construct full image URL if needed
           let imageUrl = data.item.image;
           if (imageUrl && !imageUrl.startsWith('http')) {
-            imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+            // LOCAL DEVELOPMENT
+            imageUrl = `http://localhost:8000/${imageUrl}`;
+            // PRODUCTION SERVER
+            // imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
           }
           setProduct({ ...data.item, image: imageUrl });
           
@@ -171,12 +174,29 @@ function ProductDetail() {
     window.open(whatsappUrl, '_blank');
   };
 
+  // Skeleton loader for product detail
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#002D7A] mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading product details...</p>
+      <div className="min-h-screen bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 lg:gap-12">
+            {/* Image Skeleton */}
+            <div className="space-y-4 animate-pulse">
+              <div className="aspect-square bg-gray-200 rounded-xl"></div>
+            </div>
+            {/* Details Skeleton */}
+            <div className="space-y-4 animate-pulse">
+              <div className="h-8 bg-gray-200 rounded w-3/4"></div>
+              <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+              <div className="h-10 bg-gray-200 rounded w-1/4"></div>
+              <div className="space-y-2">
+                <div className="h-4 bg-gray-200 rounded w-full"></div>
+                <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+                <div className="h-4 bg-gray-200 rounded w-4/6"></div>
+              </div>
+              <div className="h-12 bg-gray-200 rounded"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -260,12 +280,12 @@ function ProductDetail() {
           {/* Product Images */}
           <div className="space-y-4">
             {/* Main Image */}
-            <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center">
+            <div className="aspect-square bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center relative">
               {productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? (
               <img
                 src={productImages[selectedImage]}
                   alt={product.name || product.title || 'Product'}
-                className="w-full h-full object-cover"
+                className={`w-full h-full object-cover ${product.status !== 'active' ? 'opacity-50' : ''}`}
                   onError={(e) => {
                     e.target.style.display = 'none';
                     const fallback = e.target.nextElementSibling;
@@ -273,9 +293,17 @@ function ProductDetail() {
                   }}
               />
               ) : null}
-              <div className={`${productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? 'hidden' : ''} w-full h-full flex items-center justify-center`}>
+              <div className={`${productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? 'hidden' : ''} w-full h-full flex items-center justify-center ${product.status !== 'active' ? 'opacity-50' : ''}`}>
                 <span className="text-gray-400 text-4xl sm:text-5xl font-bold">{(product.name || product.title || 'P').charAt(0).toUpperCase()}</span>
               </div>
+              {/* Out of Stock Overlay */}
+              {product.status !== 'active' && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
+                  <span className="bg-red-600 text-white text-lg sm:text-xl font-bold px-6 py-3 rounded-lg shadow-lg">
+                    OUT OF STOCK
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Thumbnail Images */}
@@ -336,22 +364,75 @@ function ProductDetail() {
 
             {/* Price */}
             {canSeePrices() ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                  <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
-                    ₹{product.price}
-                  </span>
-                  {product.oldPrice && (
-                    <>
-                      <span className="text-lg sm:text-xl text-gray-400 line-through">
-                        ₹{product.oldPrice}
+              <div className="space-y-3">
+                {product.items_per_pack && product.items_per_pack > 1 ? (
+                  // Box/Pack Item - Show per piece and per box pricing
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="bg-blue-600 text-white px-2 py-1 rounded text-xs font-semibold">
+                        BOX/PACK ITEM
                       </span>
-                      <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs sm:text-sm font-medium">
-                        {discountPercentage}% OFF
+                    </div>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Price per piece:</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xl sm:text-2xl font-bold text-[#002D7A]">
+                            ₹{product.price}
+                          </span>
+                          {product.oldPrice && (
+                            <>
+                              <span className="text-base text-gray-400 line-through">
+                                ₹{product.oldPrice}
+                              </span>
+                              <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-medium">
+                                {discountPercentage}% OFF
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="border-t border-blue-200 pt-2">
+                        <p className="text-xs text-gray-600 mb-1">
+                          <span className="font-semibold">{product.items_per_pack} pieces</span> per box/pack
+                        </p>
+                        <div>
+                          <p className="text-xs text-gray-600 mb-1">Price per box (1 pack):</p>
+                          <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
+                            ₹{((product.price || 0) * (product.items_per_pack || 1)).toFixed(2)}
+                          </span>
+                          <p className="text-xs text-gray-500 mt-1">
+                            (₹{product.price} × {product.items_per_pack} pieces)
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                      <p className="text-xs text-yellow-800 font-medium">
+                        ⚠️ Minimum order: 1 box ({product.items_per_pack} pieces)
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  // Regular Item - Show normal pricing
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                      <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
+                        ₹{product.price}
                       </span>
-                    </>
-                  )}
-                </div>
+                      {product.oldPrice && (
+                        <>
+                          <span className="text-lg sm:text-xl text-gray-400 line-through">
+                            ₹{product.oldPrice}
+                          </span>
+                          <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs sm:text-sm font-medium">
+                            {discountPercentage}% OFF
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs sm:text-sm text-gray-600">
                   SKU: {product.sku || 'N/A'} • Stock: {product.stock || 0} units
                 </p>
@@ -379,30 +460,51 @@ function ProductDetail() {
 
             {/* Quantity Selector */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">Quantity</h3>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center border border-gray-300 rounded-lg">
-                  <button
-                    onClick={() => handleQuantityChange('decrease')}
-                    className="p-3 hover:bg-gray-50 transition-colors"
-                    disabled={quantity <= 1}
-                  >
-                    <FaMinus className="text-gray-500" size={12} />
-                  </button>
-                  <span className="px-4 py-3 text-gray-800 font-medium min-w-[3rem] text-center">
-                    {quantity}
-                  </span>
-                  <button
-                    onClick={() => handleQuantityChange('increase')}
-                    className="p-3 hover:bg-gray-50 transition-colors"
-                  >
-                    <FaPlus className="text-gray-500" size={12} />
-                  </button>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Quantity {product.items_per_pack && product.items_per_pack > 1 && (
+                  <span className="text-sm font-normal text-gray-600">(in boxes/packs)</span>
+                )}
+              </h3>
+              <div className="space-y-3">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center border border-gray-300 rounded-lg">
+                    <button
+                      onClick={() => handleQuantityChange('decrease')}
+                      className="p-3 hover:bg-gray-50 transition-colors"
+                      disabled={quantity <= 1}
+                    >
+                      <FaMinus className="text-gray-500" size={12} />
+                    </button>
+                    <span className="px-4 py-3 text-gray-800 font-medium min-w-[3rem] text-center">
+                      {quantity}
+                    </span>
+                    <button
+                      onClick={() => handleQuantityChange('increase')}
+                      className="p-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <FaPlus className="text-gray-500" size={12} />
+                    </button>
+                  </div>
+                  {product.items_per_pack && product.items_per_pack > 1 && (
+                    <span className="text-sm text-gray-600">
+                      = {quantity * product.items_per_pack} pieces
+                    </span>
+                  )}
                 </div>
                 {canSeePrices() && (
-                  <span className="text-sm text-gray-600">
-                    Total: ₹{(product.price * quantity).toFixed(2)}
-                  </span>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-900">Total Amount:</span>
+                      <span className="text-lg font-bold text-[#002D7A]">
+                        ₹{((product.price || 0) * quantity * (product.items_per_pack || 1)).toFixed(2)}
+                      </span>
+                    </div>
+                    {product.items_per_pack && product.items_per_pack > 1 && (
+                      <p className="text-xs text-gray-600">
+                        {quantity} box(es) × {product.items_per_pack} pieces × ₹{product.price} per piece
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -410,13 +512,19 @@ function ProductDetail() {
             {/* Action Buttons */}
             <div className="space-y-3">
               <div className="flex gap-3">
-                <button
-                  onClick={handleAddToCart}
-                  className="flex-1 bg-[#002D7A] text-white py-4 px-6 rounded-lg font-semibold hover:bg-[#001C4C] transition-colors flex items-center justify-center gap-2"
-                >
-                  <FaShoppingCart size={18} />
-                  Add to Cart
-                </button>
+                {product.status === 'active' ? (
+                  <button
+                    onClick={handleAddToCart}
+                    className="flex-1 bg-[#002D7A] text-white py-4 px-6 rounded-lg font-semibold hover:bg-[#001C4C] transition-colors flex items-center justify-center gap-2"
+                  >
+                    <FaShoppingCart size={18} />
+                    Add to Cart
+                  </button>
+                ) : (
+                  <div className="flex-1 bg-red-100 border-2 border-red-300 text-red-700 py-4 px-6 rounded-lg font-semibold text-center">
+                    Out of Stock
+                  </div>
+                )}
                 <button
                   onClick={handleWishlist}
                   className={`p-4 rounded-lg border-2 transition-colors ${
@@ -452,7 +560,7 @@ function ProductDetail() {
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">Free Shipping</p>
-                  <p className="text-sm text-gray-600">On orders over ₹5,000</p>
+                  <p className="text-sm text-gray-600">On orders over ₹1,000</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">

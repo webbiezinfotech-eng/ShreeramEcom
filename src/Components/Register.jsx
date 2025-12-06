@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FaEye, FaEyeSlash, FaUser, FaLock, FaEnvelope, FaPhone, FaBuilding } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaUser, FaLock, FaEnvelope, FaPhone, FaBuilding, FaMapMarkerAlt } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 import { registerCustomer } from "../services/api";
 
@@ -10,6 +10,7 @@ function Register() {
     email: "",
     phone: "",
     company: "",
+    address: "",
     password: "",
     confirmPassword: "",
     agreeToTerms: false,
@@ -52,20 +53,28 @@ function Register() {
 
     if (!formData.phone) {
       newErrors.phone = "Phone number is required";
-    } else if (!/^[0-9]{10}$/.test(formData.phone.replace(/\D/g, ""))) {
-      newErrors.phone = "Phone number must be 10 digits";
+    } else {
+      const phoneDigits = formData.phone.replace(/\D/g, "");
+      if (phoneDigits.length < 10) {
+        newErrors.phone = "Phone number must be exactly 10 digits";
+      } else if (phoneDigits.length > 10) {
+        newErrors.phone = "Phone number cannot exceed 10 digits";
+      } else if (!/^[0-9]{10}$/.test(phoneDigits)) {
+        newErrors.phone = "Phone number must contain only digits";
+      }
     }
 
     if (!formData.company.trim()) {
       newErrors.company = "Company name is required";
     }
 
+    // Address validation (optional but validate if provided)
+    if (formData.address.trim() && formData.address.trim().length < 10) {
+      newErrors.address = "Please provide a complete address (at least 10 characters)";
+    }
+
     if (!formData.password) {
       newErrors.password = "Password is required";
-    } else if (formData.password.length < 8) {
-      newErrors.password = "Password must be at least 8 characters";
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(formData.password)) {
-      newErrors.password = "Password must contain uppercase, lowercase, and number";
     }
 
     if (!formData.confirmPassword) {
@@ -91,7 +100,8 @@ function Register() {
       try {
         const result = await registerCustomer({
           ...formData,
-          name: formData.fullName
+          name: formData.fullName,
+          address: formData.address
         });
         
         if (result.ok && result.customer) {
@@ -201,12 +211,27 @@ function Register() {
                     name="phone"
                     type="tel"
                     autoComplete="tel"
+                    maxLength="10"
                     value={formData.phone}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      // Only allow digits, max 10
+                      const value = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setFormData(prev => ({
+                        ...prev,
+                        phone: value
+                      }));
+                      // Clear error when user starts typing
+                      if (errors.phone) {
+                        setErrors(prev => ({
+                          ...prev,
+                          phone: ""
+                        }));
+                      }
+                    }}
                     className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors ${
                       errors.phone ? "border-red-500" : "border-gray-300"
                     }`}
-                    placeholder="Enter your phone number"
+                    placeholder="Enter 10 digit phone number"
                   />
                 </div>
                 {errors.phone && (
@@ -239,6 +264,33 @@ function Register() {
                   <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.company}</p>
                 )}
               </div>
+            </div>
+
+            {/* Address Field */}
+            <div>
+              <label htmlFor="address" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
+                Address
+              </label>
+              <div className="relative">
+                <div className="absolute top-3 left-3 flex items-start pointer-events-none">
+                  <FaMapMarkerAlt className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 mt-0.5" />
+                </div>
+                <textarea
+                  id="address"
+                  name="address"
+                  rows="3"
+                  autoComplete="street-address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  className={`block w-full pl-9 sm:pl-10 pr-3 py-2.5 sm:py-3 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent transition-colors resize-none ${
+                    errors.address ? "border-red-500" : "border-gray-300"
+                  }`}
+                  placeholder="Enter your complete address (street, city, state, pincode)"
+                />
+              </div>
+              {errors.address && (
+                <p className="mt-1 text-xs sm:text-sm text-red-600">{errors.address}</p>
+              )}
             </div>
 
             {/* Password Fields */}

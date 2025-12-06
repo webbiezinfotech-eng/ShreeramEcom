@@ -136,12 +136,20 @@ const Dashboard: React.FC = () => {
       .catch((e) => setMsgError(e?.message || "Failed"))
       .finally(() => setMsgLoading(false));
     
-    // Fetch all customers for new registrations
+    // Fetch all customers for new registrations (no status filter - get ALL customers)
     setCustomersLoading(true);
-    customersAPI.getAll(1, 50)
+    customersAPI.getAll(1, 1000) // Increased limit to get all customers
       .then((data: any) => {
         const customers = Array.isArray(data) ? data : (data?.items || []);
-        setAllCustomers(customers);
+        // Sort: Approved first, then Pending, then Rejected
+        const sortedCustomers = [...customers].sort((a, b) => {
+          if (String(a.status) === 'true') return -1;
+          if (String(b.status) === 'true') return 1;
+          if (String(a.status) === 'false') return 1;
+          if (String(b.status) === 'false') return -1;
+          return 0;
+        });
+        setAllCustomers(sortedCustomers);
       })
       .catch((e) => setCustomersError(e?.message || "Failed"))
       .finally(() => setCustomersLoading(false));
@@ -150,20 +158,42 @@ const Dashboard: React.FC = () => {
   // Handle customer status update (approve/reject)
   const handleCustomerStatusUpdate = async (customerId: number, newStatus: 'true' | 'false') => {
     try {
+      // Only send status in the update request - this will set status to 'false' in database
       await customersAPI.update(customerId, { status: newStatus });
-      // Refresh customers list
-      const data: any = await customersAPI.getAll(1, 50);
+      
+      // Refresh customers list - get ALL customers (no status filter)
+      const data: any = await customersAPI.getAll(1, 1000);
       const customers = Array.isArray(data) ? data : (data?.items || []);
-      setAllCustomers(customers);
+      // Sort: Approved first, then Pending, then Rejected
+      const sortedCustomers = [...customers].sort((a, b) => {
+        if (String(a.status) === 'true') return -1;
+        if (String(b.status) === 'true') return 1;
+        if (String(a.status) === 'false') return 1;
+        if (String(b.status) === 'false') return -1;
+        return 0;
+      });
+      setAllCustomers(sortedCustomers);
       setAlert({
         type: 'success',
         message: `Customer ${newStatus === 'true' ? 'approved' : 'rejected'} successfully`,
         isVisible: true
       });
     } catch (error: any) {
+      console.error('Error updating customer status:', error);
+      let errorMessage = 'Failed to update customer status';
+      if (error?.response) {
+        try {
+          const errorData = typeof error.response === 'string' ? JSON.parse(error.response) : error.response;
+          errorMessage = errorData?.error || errorData?.message || errorMessage;
+        } catch (e) {
+          errorMessage = error.response?.error || error.response?.message || errorMessage;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
       setAlert({
         type: 'error',
-        message: error?.message || 'Failed to update customer status',
+        message: errorMessage,
         isVisible: true
       });
     }
@@ -327,34 +357,45 @@ const Dashboard: React.FC = () => {
                       <td className="text-gray-600 text-sm">{c.phone || "-"}</td>
                       <td className="text-gray-600 text-sm max-w-xs truncate">{c.address || "-"}</td>
                       <td>
-                        <span className={String(c.status) === 'true' ? "status-badge status-badge-success" : "status-badge status-badge-warning"}>
-                          {String(c.status) === 'true' ? 'Approved' : 'Pending'}
+                        <span className={
+                          String(c.status) === 'true' 
+                            ? "status-badge status-badge-success" 
+                            : String(c.status) === 'false'
+                            ? "status-badge status-badge-danger"
+                            : "status-badge status-badge-warning"
+                        }>
+                          {String(c.status) === 'true' 
+                            ? 'Approved' 
+                            : String(c.status) === 'false'
+                            ? 'Rejected'
+                            : 'Pending'}
                         </span>
                       </td>
                       <td>
                         <div className="flex gap-2">
-                          {String(c.status) !== 'true' && (
-                            <button
-                              onClick={() => handleCustomerStatusUpdate(c.id, 'true')}
-                              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
-                            >
-                              Approve
-                            </button>
-                          )}
                           {String(c.status) === 'true' ? (
+                            // Approved - Show Reject button
                             <button
                               onClick={() => handleCustomerStatusUpdate(c.id, 'false')}
                               className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
                             >
                               Reject
                             </button>
-                          ) : (
+                          ) : String(c.status) === 'false' ? (
+                            // Rejected - Show Approve button
                             <button
-                              onClick={() => handleCustomerStatusUpdate(c.id, 'false')}
-                              className="px-3 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500 transition-colors"
-                              disabled
+                              onClick={() => handleCustomerStatusUpdate(c.id, 'true')}
+                              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
                             >
-                              Reject
+                              Approve
+                            </button>
+                          ) : (
+                            // Pending - Show Approve button
+                            <button
+                              onClick={() => handleCustomerStatusUpdate(c.id, 'true')}
+                              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
+                            >
+                              Approve
                             </button>
                           )}
                         </div>

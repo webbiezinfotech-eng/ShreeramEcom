@@ -1,5 +1,7 @@
-export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
-// export const API_BASE = "http://localhost:8000/api"; // LOCAL DEVELOPMENT
+// PRODUCTION SERVER
+// export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
+// LOCAL DEVELOPMENT
+export const API_BASE = "http://localhost:8000/api";
 
 // ✅ Get products
 export async function getProducts(limit = null, page = 1, search = '') {
@@ -38,7 +40,8 @@ export async function getProducts(limit = null, page = 1, search = '') {
           sku: item.sku || '',
           stock: item.stock || 0,
           status: item.status || 'active',
-          rating: 4.5 // Default rating
+          rating: 4.5, // Default rating
+          items_per_pack: parseInt(item.items_per_pack || 1)
         };
       });
     }
@@ -82,7 +85,8 @@ export async function getProductsByCategory(categoryId, limit = null) {
           sku: item.sku || '',
           stock: item.stock || 0,
           status: item.status || 'active',
-          rating: 4.5
+          rating: 4.5,
+          items_per_pack: parseInt(item.items_per_pack || 1)
         };
       });
       
@@ -127,7 +131,8 @@ export async function getProductById(id) {
           sku: item.sku || '',
           stock: item.stock || 0,
           status: item.status || 'active',
-          rating: 4.5
+          rating: 4.5,
+          items_per_pack: parseInt(item.items_per_pack || 1)
         }
       };
     }
@@ -276,7 +281,11 @@ export async function loginCustomer(email, password) {
     
     if (!res.ok) {
       const error = await res.json().catch(() => ({ error: "Failed to login" }));
-      return { ok: false, error: error.error || "Failed to login" };
+      return { 
+        ok: false, 
+        error: error.error || "Failed to login",
+        inactive: error.inactive || false
+      };
     }
     
     const data = await res.json();
@@ -288,7 +297,11 @@ export async function loginCustomer(email, password) {
       
       return { ok: true, customer: data.customer };
     } else {
-      return { ok: false, error: data.error || "Invalid credentials" };
+      return { 
+        ok: false, 
+        error: data.error || "Invalid credentials",
+        inactive: data.inactive || false
+      };
     }
   } catch (err) {
     console.error("API Error (login):", err);
@@ -308,7 +321,7 @@ export async function registerCustomer(customerData) {
         firm: customerData.company || '',
         email: customerData.email,
         phone: customerData.phone || '',
-        address: '',
+        address: customerData.address || '',
         password: customerData.password || '', // Include password for hashing
         status: 'true'
       })

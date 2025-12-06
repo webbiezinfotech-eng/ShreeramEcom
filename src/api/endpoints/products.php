@@ -247,6 +247,7 @@ try {
         $dimensions = isset($body['dimensions']) ? trim($body['dimensions']) : '';
         $currency = isset($body['currency']) ? trim($body['currency']) : 'INR';
         $category_id = isset($body['category_id']) && $body['category_id'] !== '' ? (int)$body['category_id'] : null;
+        $items_per_pack = isset($body['items_per_pack']) ? max(1, (int)$body['items_per_pack']) : 1;
 
         if ($name === '') throw new Exception('name is required');
 
@@ -314,8 +315,8 @@ try {
         }
 
         // ✅ Insert product (WITHOUT image column)
-        $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id)
-                VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id)";
+        $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id, items_per_pack)
+                VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id, :items_per_pack)";
         $st = $pdo->prepare($sql);
         $st->bindValue(':name', $name);
         $st->bindValue(':sku', $sku);
@@ -328,6 +329,7 @@ try {
         $st->bindValue(':dimensions', $dimensions);
         $st->bindValue(':currency', $currency);
         $st->bindValue(':category_id', $category_id, $category_id === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+        $st->bindValue(':items_per_pack', $items_per_pack);
         $st->execute();
 
         $productId = (int)$pdo->lastInsertId();
@@ -478,6 +480,7 @@ try {
             'dimensions' => 'string',
             'currency' => 'string',
             'category_id' => 'int_nullable',
+            'items_per_pack' => 'int',
         ];
 
         $sets = [];

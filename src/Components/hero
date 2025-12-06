@@ -33,7 +33,7 @@ function Hero() {
           <span className="flex items-center gap-2">
             <FaPhoneAlt className="text-[#FE7F06]" /> +91 7304044465
           </span>
-          <span>Free shipping on orders over ₹ 5,000</span>
+          <span>Free shipping on orders over ₹ 1,000</span>
         </div>
         <div className="flex items-center gap-4">
           <button className="hover:underline">Login</button>

@@ -414,7 +414,14 @@ const ProductList: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium text-gray-800 truncate">{product.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-800 truncate">{product.name}</p>
+                          {(product as any).items_per_pack && (product as any).items_per_pack > 1 && (
+                            <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-semibold whitespace-nowrap">
+                              BOX ({((product as any).items_per_pack)} pcs)
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-500 truncate">
                           {(product.description || "").slice(0, 50)}
                           {product.description && product.description.length > 50 ? "…" : ""}
@@ -423,8 +430,29 @@ const ProductList: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-gray-600 truncate">{product.sku || "-"}</td>
                     <td className="px-4 py-3 text-gray-600 truncate">{product.category_name || "-"}</td>
-                    <td className="px-4 py-3 font-semibold text-green-600">{INR(product.mrp || 0)}</td>
-                    <td className="px-4 py-3 font-semibold text-blue-600">{INR(product.wholesale_rate || 0)}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-green-600">
+                        {INR(product.mrp || 0)}
+                        {(product as any).items_per_pack && (product as any).items_per_pack > 1 && (
+                          <p className="text-xs text-gray-500 font-normal">
+                            per piece
+                          </p>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-semibold text-blue-600">
+                        {INR(product.wholesale_rate || 0)}
+                        {(product as any).items_per_pack && (product as any).items_per_pack > 1 && (
+                          <div className="text-xs text-gray-500 font-normal">
+                            <p>per piece</p>
+                            <p className="text-blue-700 font-semibold">
+                              {INR((product.wholesale_rate || 0) * ((product as any).items_per_pack || 1))} per box
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{product.stock ?? 0}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -571,6 +599,7 @@ type EditForm = {
   brand?: string;
   dimensions?: string;
   category_id?: number | "";
+  items_per_pack?: number;
 };
 
 const EditProductModal: React.FC<{
@@ -591,6 +620,7 @@ const EditProductModal: React.FC<{
     brand: product.brand || "",
     dimensions: product.dimensions || "",
     category_id: product.category_id ?? "",
+    items_per_pack: Number((product as any).items_per_pack || 1),
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -603,7 +633,7 @@ const EditProductModal: React.FC<{
     setForm((f) => ({
       ...f,
       [name]:
-        name === "mrp" || name === "wholesale_rate" || name === "stock"
+        name === "mrp" || name === "wholesale_rate" || name === "stock" || name === "items_per_pack"
           ? Number(value)
           : name === "category_id"
             ? (value === "" ? "" : Number(value))
@@ -636,6 +666,7 @@ const EditProductModal: React.FC<{
         formData.append("brand", form.brand || "");
         formData.append("dimensions", form.dimensions || "");
         formData.append("currency", "INR");
+        formData.append("items_per_pack", String(form.items_per_pack || 1));
         if (form.category_id !== "" && form.category_id !== null) {
           formData.append("category_id", String(form.category_id));
         }
@@ -730,6 +761,18 @@ const EditProductModal: React.FC<{
           <div>
             <label className="text-sm text-gray-600">Dimensions</label>
             <input name="dimensions" value={form.dimensions} onChange={change} className="mt-1 w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label className="text-sm text-gray-600">Items per Pack (Box) *</label>
+            <input 
+              type="number" 
+              name="items_per_pack" 
+              value={form.items_per_pack || 1} 
+              onChange={change} 
+              min="1"
+              className="mt-1 w-full border rounded-lg px-3 py-2" 
+            />
+            <p className="text-xs text-gray-500 mt-1">How many items in 1 pack/box (e.g., 10)</p>
           </div>
           
           {/* ✅ Product Image Upload */}

@@ -17,11 +17,13 @@ import Quote from "./Components/Quote.jsx";
 import CategoryPage from "./Components/CategoryPage.jsx";
 import ProductDetail from "./Components/ProductDetail.jsx";
 import ScrollToTop from "./Components/ScrollToTop.jsx";
+import CartNotification from "./Components/CartNotification.jsx";
 
 function WebsiteApp() {
   return (
     <div className="">
       <ScrollToTop />
+      <CartNotification />
       <Routes>
         <Route path="/" element={
           <>

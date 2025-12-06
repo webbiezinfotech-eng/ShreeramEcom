@@ -19,6 +19,7 @@ type ProductForm = {
   dimensions: string;
   category_id: string;
   status: "active" | "inactive";
+  items_per_pack: string;
 };
 
 const AddProduct: React.FC = () => {
@@ -35,6 +36,7 @@ const AddProduct: React.FC = () => {
     dimensions: "",
     category_id: "",
     status: "active",
+    items_per_pack: "1",
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -175,6 +177,7 @@ const AddProduct: React.FC = () => {
       dimensions: "",
       category_id: "",
       status: "active",
+      items_per_pack: "1",
     });
     setImageFile(null);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -199,6 +202,7 @@ const AddProduct: React.FC = () => {
       formData.append("dimensions", form.dimensions);
       formData.append("status", form.status);
       formData.append("currency", "INR");
+      formData.append("items_per_pack", form.items_per_pack || "1");
       
       if (form.category_id) {
         formData.append("category_id", form.category_id);
@@ -359,7 +363,7 @@ const AddProduct: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-Pack of item 
+                  SKU
                 </label>
                 <input
                   type="text"
@@ -369,6 +373,23 @@ Pack of item
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter SKU"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Items per Pack (Box) *
+                </label>
+                <input
+                  type="number"
+                  name="items_per_pack"
+                  value={form.items_per_pack || "1"}
+                  onChange={handleChange}
+                  min="1"
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., 10 (1 box = 10 packets)"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter how many items are in 1 pack/box. If 1 box = 10 packets, enter 10</p>
               </div>
 
               <div>

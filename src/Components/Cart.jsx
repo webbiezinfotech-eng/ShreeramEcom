@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaMinus, FaTrash, FaShoppingBag, FaArrowLeft } from "react-icons/fa";
+import { FaPlus, FaMinus, FaTrash, FaShoppingBag, FaArrowLeft, FaTimes, FaExclamationTriangle } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
 
@@ -12,6 +12,8 @@ function Cart() {
     getCartTotal,
     loadCartItems 
   } = useCart();
+  
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, itemId: null, itemName: null });
 
   // Load cart items when component mounts
   useEffect(() => {
@@ -43,15 +45,37 @@ function Cart() {
     }
   };
 
-  const removeItem = async (id) => {
-    await removeItemFromCart(id);
+  const handleDeleteClick = (id, name) => {
+    setDeleteConfirm({ isOpen: true, itemId: id, itemName: name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleteConfirm.itemId) {
+      try {
+        await removeItemFromCart(deleteConfirm.itemId);
+        // Reload cart items to ensure sync
+        await loadCartItems();
+        setDeleteConfirm({ isOpen: false, itemId: null, itemName: null });
+      } catch (error) {
+        console.error('Error removing item:', error);
+        // Still close the modal even if there's an error
+        setDeleteConfirm({ isOpen: false, itemId: null, itemName: null });
+        // Reload to sync
+        await loadCartItems();
+      }
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirm({ isOpen: false, itemId: null, itemName: null });
   };
 
   const getSubtotal = () => {
     return cartItems.reduce((total, item) => {
       const price = parseFloat(item.price || 0);
       const quantity = parseInt(item.quantity || 1);
-      return total + (price * quantity);
+      const itemsPerPack = parseInt(item.items_per_pack || 1);
+      return total + (price * quantity * itemsPerPack);
     }, 0);
   };
 
@@ -110,35 +134,35 @@ function Cart() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
-            <Link to="/" className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 text-[#002D7A] hover:text-[#001C4C] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
-              <FaArrowLeft size={16} className="sm:w-5 sm:h-5" />
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5">
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <Link to="/" className="flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 text-[#002D7A] hover:text-[#001C4C] hover:bg-gray-100 rounded-full transition-colors flex-shrink-0">
+              <FaArrowLeft size={14} className="sm:w-4 sm:h-4" />
             </Link>
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-[#002D7A]">Shopping Cart</h1>
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#002D7A]">Shopping Cart</h1>
           </div>
-          <p className="text-[#002D7A] text-sm sm:text-base md:text-lg">{cartItems.length} item(s) in your cart</p>
+          <p className="text-[#002D7A] text-xs sm:text-sm ml-10 sm:ml-11">{cartItems.length} item(s) in your cart</p>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8">
           {/* Cart Items */}
           <div className="lg:w-2/3">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Cart Items</h2>
+            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-5 lg:p-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-5">Cart Items</h2>
               
-              <div className="space-y-3 sm:space-y-4">
+              <div className="space-y-3 sm:space-y-3">
                 {cartItems.map((item) => (
-                  <div key={item.id} className="flex flex-col sm:flex-row gap-3 sm:gap-4 p-4 sm:p-5 border border-gray-100 rounded-lg sm:rounded-xl hover:shadow-sm transition-all duration-200 bg-gray-50/50">
+                  <div key={item.id} className="flex flex-col sm:flex-row gap-3 p-3 sm:p-4 border border-gray-100 rounded-lg hover:shadow-sm transition-all duration-200 bg-gray-50/50">
                     {/* Product Image */}
                     <div className="flex-shrink-0 self-center sm:self-start">
                       {(item.image && item.image.trim() !== '') || (item.image_url && item.image_url.trim() !== '') ? (
                         <img 
                           src={item.image || item.image_url}
                           alt={item.name || 'Product'}
-                          className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
+                          className="w-16 h-16 sm:w-18 sm:h-18 object-cover rounded-lg"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             const fallback = e.target.nextElementSibling;
@@ -146,74 +170,161 @@ function Cart() {
                           }}
                         />
                       ) : null}
-                      <div className={`${((item.image && item.image.trim() !== '') || (item.image_url && item.image_url.trim() !== '')) ? 'hidden' : ''} w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-lg flex items-center justify-center`}>
-                        <span className="text-gray-400 text-lg sm:text-xl font-bold">{(item.name || 'Product').charAt(0).toUpperCase()}</span>
+                      <div className={`${((item.image && item.image.trim() !== '') || (item.image_url && item.image_url.trim() !== '')) ? 'hidden' : ''} w-16 h-16 sm:w-18 sm:h-18 bg-gray-200 rounded-lg flex items-center justify-center`}>
+                        <span className="text-gray-400 text-base sm:text-lg font-bold">{(item.name || 'Product').charAt(0).toUpperCase()}</span>
                       </div>
                     </div>
 
                     {/* Product Details */}
                     <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
                           <span className="text-xs text-[#002D7A] font-medium uppercase tracking-wide">
                             {item.category_name || 'General'}
                           </span>
-                          <h3 className="text-base font-semibold text-gray-800 mt-1 mb-2">
+                          <h3 className="text-sm sm:text-base font-semibold text-gray-800 mt-1 mb-2 line-clamp-2">
                             {item.name}
                           </h3>
                           
-                          {/* Price */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <span className="text-lg font-bold text-[#002D7A]">
-                              ₹{parseFloat(item.price || 0).toFixed(2)}
-                            </span>
+                          {/* Price - Detailed Pack/Box Information */}
+                          <div className="mb-2 sm:mb-3">
+                            {item.items_per_pack && item.items_per_pack > 1 ? (
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                                {/* Badge */}
+                                <div className="inline-block bg-[#002D7A] text-white text-xs font-semibold px-2 py-1 rounded mb-2">
+                                  BOX/PACK ITEM
+                                </div>
+                                
+                                {/* Price per piece */}
+                                <div>
+                                  <p className="text-xs text-gray-600 mb-1">Price per piece:</p>
+                                  <p className="text-base sm:text-lg font-bold text-[#002D7A]">
+                                    ₹{parseFloat(item.price || 0).toFixed(2)}
+                                  </p>
+                                </div>
+                                
+                                {/* Items per pack */}
+                                <div className="border-t border-blue-200 pt-2">
+                                  <p className="text-xs text-gray-600 mb-1">
+                                    <span className="font-semibold">{item.items_per_pack} pieces</span> per box/pack
+                                  </p>
+                                </div>
+                                
+                                {/* Price per box */}
+                                <div>
+                                  <p className="text-xs text-gray-600 mb-1">Price per box (1 pack):</p>
+                                  <p className="text-lg sm:text-xl font-bold text-[#002D7A]">
+                                    ₹{((parseFloat(item.price || 0) * parseInt(item.items_per_pack || 1))).toFixed(2)}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    (₹{parseFloat(item.price || 0).toFixed(2)} × {item.items_per_pack} pieces)
+                                  </p>
+                                </div>
+                                
+                                {/* Minimum order warning */}
+                                <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                                  <p className="text-xs text-yellow-800 font-medium">
+                                    ⚠️ Minimum order: 1 box ({item.items_per_pack} pieces)
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-base sm:text-lg font-bold text-[#002D7A]">
+                                  ₹{parseFloat(item.price || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {/* Remove Button */}
                         <button
-                          onClick={() => removeItem(item.cart_id || item.id)}
-                          className="text-red-500 hover:text-red-700 transition-colors p-2"
+                          onClick={() => handleDeleteClick(item.cart_id || item.id, item.name)}
+                          className="text-red-500 hover:text-red-700 transition-colors p-1.5 sm:p-2 flex-shrink-0"
                           title="Remove item"
                         >
-                          <FaTrash size={16} />
+                          <FaTrash size={14} className="sm:w-4 sm:h-4" />
                         </button>
                       </div>
 
                       {/* Quantity Controls */}
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-gray-600">Quantity:</span>
-                        <div className="flex items-center border border-gray-200 rounded-lg bg-white">
-                          <button
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              await updateQuantity(item.cart_id || item.id, -1);
-                            }}
-                            className="p-2 hover:bg-gray-50 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={parseInt(item.quantity || 1) <= 1}
-                            type="button"
-                          >
-                            <FaMinus className="text-gray-500" size={10} />
-                          </button>
-                          <span className="px-3 py-2 text-gray-800 font-medium min-w-[2.5rem] text-center text-sm">
-                            {item.quantity}
+                      <div className="space-y-2 mt-2">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                          <span className="text-xs sm:text-sm font-medium text-gray-600 whitespace-nowrap">
+                            {item.items_per_pack && item.items_per_pack > 1 ? 'Boxes:' : 'Quantity:'}
                           </span>
-                          <button
-                            onClick={async (e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              await updateQuantity(item.cart_id || item.id, 1);
-                            }}
-                            className="p-2 hover:bg-gray-50 transition-colors rounded-r-lg"
-                            type="button"
-                          >
-                            <FaPlus className="text-gray-500" size={10} />
-                          </button>
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white">
+                            <button
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                await updateQuantity(item.cart_id || item.id, -1);
+                              }}
+                              className="p-1.5 sm:p-2 hover:bg-gray-50 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                              disabled={parseInt(item.quantity || 1) <= 1}
+                              type="button"
+                            >
+                              <FaMinus className="text-gray-500" size={10} />
+                            </button>
+                            <span className="px-2 sm:px-3 py-1.5 sm:py-2 text-gray-800 font-medium min-w-[2rem] sm:min-w-[2.5rem] text-center text-xs sm:text-sm">
+                              {item.quantity}
+                            </span>
+                            <button
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                await updateQuantity(item.cart_id || item.id, 1);
+                              }}
+                              className="p-1.5 sm:p-2 hover:bg-gray-50 transition-colors rounded-r-lg"
+                              type="button"
+                            >
+                              <FaPlus className="text-gray-500" size={10} />
+                            </button>
+                          </div>
+                          {item.items_per_pack && item.items_per_pack > 1 && (
+                            <span className="text-xs text-gray-600 whitespace-nowrap">
+                              = {parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1)} pieces
+                            </span>
+                          )}
                         </div>
-                        <span className="text-sm font-semibold text-[#002D7A]">
-                          Total: ₹{(parseFloat(item.price || 0) * parseInt(item.quantity || 1)).toFixed(2)}
-                        </span>
+                        <div className="bg-gray-50 rounded-lg p-2 sm:p-3 border border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs sm:text-sm font-medium text-gray-700">Item Total:</span>
+                            <span className="text-base sm:text-lg font-bold text-[#002D7A]">
+                              ₹{((parseFloat(item.price || 0) * parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1))).toFixed(2)}
+                            </span>
+                          </div>
+                          {item.items_per_pack && item.items_per_pack > 1 ? (
+                            <div className="space-y-2 mt-2 border-t border-gray-200 pt-2">
+                              {/* Box-based calculation - Clear and simple */}
+                              <div className="bg-white rounded p-2 border border-blue-200">
+                                <p className="text-xs sm:text-sm font-semibold text-gray-800 mb-1">
+                                  Calculation:
+                                </p>
+                                <p className="text-xs sm:text-sm text-gray-700">
+                                  <span className="font-bold text-[#002D7A]">{item.quantity}</span> box(es) × <span className="font-bold text-[#002D7A]">₹{((parseFloat(item.price || 0) * parseInt(item.items_per_pack || 1))).toFixed(2)}</span> per box
+                                </p>
+                                <p className="text-xs text-gray-600 mt-1">
+                                  = <span className="font-semibold">{item.quantity}</span> × ₹{((parseFloat(item.price || 0) * parseInt(item.items_per_pack || 1))).toFixed(2)} = ₹{((parseFloat(item.price || 0) * parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1))).toFixed(2)}
+                                </p>
+                              </div>
+                              {/* Detailed breakdown */}
+                              <div className="space-y-1">
+                                <p className="text-xs text-gray-600">
+                                  <span className="font-semibold">{item.quantity}</span> box(es) = <span className="font-semibold">{parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1)}</span> pieces total
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  (₹{parseFloat(item.price || 0).toFixed(2)} per piece × {item.items_per_pack} pieces per box)
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-600 mt-1">
+                              {item.quantity} item(s) × ₹{parseFloat(item.price || 0).toFixed(2)} = ₹{((parseFloat(item.price || 0) * parseInt(item.quantity || 1))).toFixed(2)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -224,59 +335,59 @@ function Cart() {
 
           {/* Order Summary */}
           <div className="lg:w-1/3">
-            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 sticky top-4 sm:top-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Summary</h2>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 sm:p-5 lg:p-6 sticky top-4">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-5">Order Summary</h2>
               
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {/* Subtotal */}
-                <div className="flex justify-between py-2">
-                  <span className="text-gray-600">Subtotal ({cartItems.length} items)</span>
-                  <span className="font-semibold text-gray-800">₹{getSubtotal().toFixed(2)}</span>
+                <div className="flex justify-between py-1 sm:py-2">
+                  <span className="text-sm sm:text-base text-gray-600">Subtotal ({cartItems.length} items)</span>
+                  <span className="text-sm sm:text-base font-semibold text-gray-800">₹{getSubtotal().toFixed(2)}</span>
                 </div>
 
                 {/* Divider */}
-                <div className="border-t border-gray-200 my-4"></div>
+                <div className="border-t border-gray-200 my-3 sm:my-4"></div>
 
                 {/* Total */}
-                <div className="flex justify-between text-xl font-bold py-2">
+                <div className="flex justify-between text-lg sm:text-xl font-bold py-1 sm:py-2">
                   <span className="text-gray-800">Total</span>
                   <span className="text-[#002D7A]">₹{getTotal().toFixed(2)}</span>
                 </div>
 
                 {/* Checkout Button */}
-                {getSubtotal() < 5000 ? (
+                {getSubtotal() < 1000 ? (
                   <>
-                    <button disabled className="w-full bg-gray-200 text-gray-500 py-4 px-4 rounded-xl font-semibold cursor-not-allowed flex items-center justify-center gap-2 mt-6">
-                      <FaShoppingBag size={18} />
+                    <button disabled className="w-full bg-gray-200 text-gray-500 py-3 sm:py-4 px-4 rounded-lg sm:rounded-xl font-semibold cursor-not-allowed flex items-center justify-center gap-2 mt-4 sm:mt-5 text-sm sm:text-base">
+                      <FaShoppingBag size={16} className="sm:w-[18px] sm:h-[18px]" />
                       Proceed to Checkout
                     </button>
-                    <div className="text-sm text-red-600 text-center mt-3 bg-red-50 p-3 rounded-lg">
-                      Minimum order amount is ₹5,000 to proceed to checkout.
+                    <div className="text-xs sm:text-sm text-red-600 text-center mt-2 sm:mt-3 bg-red-50 p-2 sm:p-3 rounded-lg">
+                      Minimum order amount is ₹1,000 to proceed to checkout.
                     </div>
                   </>
                 ) : (
-                  <Link to="/checkout" className="w-full bg-[#002D7A] text-white py-4 px-4 rounded-xl font-semibold hover:bg-[#001C4C] transition-colors flex items-center justify-center gap-2 mt-6">
-                    <FaShoppingBag size={18} />
+                  <Link to="/checkout" className="w-full bg-[#002D7A] text-white py-3 sm:py-4 px-4 rounded-lg sm:rounded-xl font-semibold hover:bg-[#001C4C] transition-colors flex items-center justify-center gap-2 mt-4 sm:mt-5 text-sm sm:text-base">
+                    <FaShoppingBag size={16} className="sm:w-[18px] sm:h-[18px]" />
                     Proceed to Checkout
                   </Link>
                 )}
 
                 {/* Security Notice */}
-                <div className="text-xs text-gray-500 text-center">
+                <div className="text-xs text-gray-500 text-center mt-3 sm:mt-4">
                   🔒 Secure checkout with SSL encryption
                 </div>
               </div>
 
               {/* Promo Code */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Have a promo code?</h3>
+              <div className="mt-4 sm:mt-5 pt-4 sm:pt-5 border-t border-gray-200">
+                <h3 className="text-xs sm:text-sm font-medium text-gray-700 mb-2 sm:mb-3">Have a promo code?</h3>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Enter code"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
+                    className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
                   />
-                  <button className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                  <button className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
                     Apply
                   </button>
                 </div>
@@ -286,6 +397,49 @@ function Cart() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm.isOpen && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/50 p-4" onClick={handleDeleteCancel}>
+          <div className="bg-white rounded-xl shadow-xl p-5 sm:p-6 max-w-md w-full mx-4 animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <FaExclamationTriangle className="text-red-600" size={20} />
+                </div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900">Remove Item?</h3>
+              </div>
+              <button
+                onClick={handleDeleteCancel}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                <FaTimes size={18} />
+              </button>
+            </div>
+            <p className="text-sm sm:text-base text-gray-600 mb-1">
+              Are you sure you want to remove
+            </p>
+            <p className="text-sm sm:text-base font-semibold text-gray-800 mb-4 sm:mb-6">
+              "{deleteConfirm.itemName}" from your cart?
+            </p>
+            <div className="flex gap-2 sm:gap-3">
+              <button
+                onClick={handleDeleteCancel}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors text-gray-700 text-sm sm:text-base font-medium"
+              >
+                No, Keep It
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors text-sm sm:text-base font-medium flex items-center justify-center gap-2"
+              >
+                <FaTrash size={14} />
+                Yes, Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

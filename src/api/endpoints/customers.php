@@ -1,6 +1,10 @@
 <?php
 // api/endpoints/customers.php
 declare(strict_types=1);
+// Suppress PHP warnings/errors to prevent HTML output before JSON
+error_reporting(0);
+ini_set('display_errors', 0);
+
 require_once __DIR__ . '/../common.php';
 require_once __DIR__ . '/../db.php';
 require_api_key();
@@ -51,9 +55,11 @@ switch ($method) {
                     respond(['ok' => false, 'error' => 'Invalid email or password'], 401);
                 }
                 
-                // Check if account is active
-                if ($customer['status'] === 'false' || $customer['status'] === false) {
-                    respond(['ok' => false, 'error' => 'Account is inactive'], 403);
+                // Check if account is active (status must be 'true', true, '1', or 1)
+                $status = $customer['status'];
+                $isInactive = ($status === 'false' || $status === false || $status === '0' || $status === 0 || $status === null || $status === '');
+                if ($isInactive) {
+                    respond(['ok' => false, 'error' => 'Please contact Shreeram Store for view products', 'inactive' => true], 403);
                 }
                 
                 // ✅ SECURITY: ALWAYS verify password if password_hash column exists
@@ -81,8 +87,11 @@ switch ($method) {
                     respond(['ok' => false, 'error' => 'Invalid email or password'], 401);
                 }
                 
-                if ($customer['status'] === 'false' || $customer['status'] === false) {
-                    respond(['ok' => false, 'error' => 'Account is inactive'], 403);
+                // Check if account is active (status must be 'true', true, '1', or 1)
+                $status = $customer['status'];
+                $isInactive = ($status === 'false' || $status === false || $status === '0' || $status === 0 || $status === null || $status === '');
+                if ($isInactive) {
+                    respond(['ok' => false, 'error' => 'Please contact Shreeram Store for view products', 'inactive' => true], 403);
                 }
                 
                 // Allow login without password verification (for backward compatibility)
@@ -148,6 +157,10 @@ switch ($method) {
             $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
         }
         
+        // Default status to 'true' (approved) for new registrations
+        // Admin can still reject them later if needed
+        $status = isset($data['status']) ? $data['status'] : 'true';
+        
         if ($hasPasswordCol) {
             $st = $pdo->prepare("INSERT INTO customers (name, firm, address, email, phone, password_hash, status, created_at)
                                  VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
@@ -158,7 +171,7 @@ switch ($method) {
                 $data['email'] ?? '',
                 $data['phone'] ?? '',
                 $passwordHash,
-                'false' // New registrations start with status=false, admin must approve
+                $status // New registrations are approved by default (status='true')
             ]);
         } else {
             $st = $pdo->prepare("INSERT INTO customers (name, firm, address, email, phone, status, created_at)
@@ -169,7 +182,7 @@ switch ($method) {
                 $data['address'] ?? '',
                 $data['email'] ?? '',
                 $data['phone'] ?? '',
-                'false' // New registrations start with status=false, admin must approve
+                $status // New registrations are approved by default (status='true')
             ]);
         }
         
@@ -185,42 +198,56 @@ switch ($method) {
 
     // ✅ Update Customer
     case 'PUT':
-        if (!isset($_GET['id'])) respond(['error' => 'Missing id'], 400);
-        $id = (int)$_GET['id'];
+        try {
+            if (!isset($_GET['id'])) {
+                respond(['error' => 'Missing id'], 400);
+            }
+            $id = (int)$_GET['id'];
 
-        $data = json_decode(file_get_contents("php://input"), true);
-        if (!$data) respond(['error' => 'Invalid JSON'], 400);
-        
-        $hasPasswordCol = hasPasswordColumn($pdo);
-        
-        // Update password if provided
-        if ($hasPasswordCol && isset($data['password']) && !empty($data['password'])) {
-            $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
-            $st = $pdo->prepare("UPDATE customers SET name=?, firm=?, address=?, email=?, phone=?, password_hash=?, status=? WHERE id=?");
-            $st->execute([
-                $data['name'] ?? '',
-                $data['firm'] ?? '',
-                $data['address'] ?? '',
-                $data['email'] ?? '',
-                $data['phone'] ?? '',
-                $passwordHash,
-                $data['status'] ?? 'true',
-                $id
-            ]);
-        } else {
-            $st = $pdo->prepare("UPDATE customers SET name=?, firm=?, address=?, email=?, phone=?, status=? WHERE id=?");
-            $st->execute([
-                $data['name'] ?? '',
-                $data['firm'] ?? '',
-                $data['address'] ?? '',
-                $data['email'] ?? '',
-                $data['phone'] ?? '',
-                $data['status'] ?? 'true',
-                $id
-            ]);
+            $data = json_decode(file_get_contents("php://input"), true);
+            if (!$data) {
+                respond(['error' => 'Invalid JSON'], 400);
+            }
+            
+            $hasPasswordCol = hasPasswordColumn($pdo);
+            
+            // Update password if provided
+            if ($hasPasswordCol && isset($data['password']) && !empty($data['password'])) {
+                $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+                $st = $pdo->prepare("UPDATE customers SET name=?, firm=?, address=?, email=?, phone=?, password_hash=?, status=? WHERE id=?");
+                $st->execute([
+                    $data['name'] ?? '',
+                    $data['firm'] ?? '',
+                    $data['address'] ?? '',
+                    $data['email'] ?? '',
+                    $data['phone'] ?? '',
+                    $passwordHash,
+                    $data['status'] ?? 'true',
+                    $id
+                ]);
+            } else {
+                // Only update status if only status is being updated
+                if (isset($data['status']) && count($data) === 1) {
+                    $st = $pdo->prepare("UPDATE customers SET status=? WHERE id=?");
+                    $st->execute([$data['status'], $id]);
+                } else {
+                    $st = $pdo->prepare("UPDATE customers SET name=?, firm=?, address=?, email=?, phone=?, status=? WHERE id=?");
+                    $st->execute([
+                        $data['name'] ?? '',
+                        $data['firm'] ?? '',
+                        $data['address'] ?? '',
+                        $data['email'] ?? '',
+                        $data['phone'] ?? '',
+                        $data['status'] ?? 'true',
+                        $id
+                    ]);
+                }
+            }
+            
+            respond(['success' => true, 'message' => 'Customer updated successfully']);
+        } catch (Exception $e) {
+            respond(['error' => 'Failed to update customer: ' . $e->getMessage()], 500);
         }
-        
-        respond(['success' => true]);
         break;
 
     default:

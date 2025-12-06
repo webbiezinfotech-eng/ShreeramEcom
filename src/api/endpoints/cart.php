@@ -93,6 +93,7 @@ try {
                 SELECT c.id, c.product_id, c.quantity, c.created_at,
                        p.name, p.sku, p.stock, p.status, p.mrp, p.wholesale_rate,
                        COALESCE(p.wholesale_rate, p.mrp, 0) as price,
+                       COALESCE(p.items_per_pack, 1) as items_per_pack,
                        cat.name as category_name,
                        COALESCE((SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY created_at DESC LIMIT 1), '') as image,
                        COALESCE((SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY created_at DESC LIMIT 1), '') as image_url
