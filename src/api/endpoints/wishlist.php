@@ -100,9 +100,9 @@ try {
         // Check if URL starts with http (PHP 7.x compatible)
         if (strpos($imageUrl, 'http') !== 0) {
           // LOCAL DEVELOPMENT
-          $imageUrl = 'http://localhost:8000/' . ltrim($imageUrl, '/');
+          // $imageUrl = 'http://localhost:8000/' . ltrim($imageUrl, '/');
           // PRODUCTION SERVER
-          // $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
+          $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
         }
       }
 

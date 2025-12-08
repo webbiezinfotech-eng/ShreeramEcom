@@ -169,11 +169,24 @@ try {
                         continue;
                     }
 
-                    // Check for duplicate product (case-insensitive name matching)
+                    // Check for duplicate product
+                    // First check by SKU if provided (SKU must be unique)
+                    $sku = isset($productData['sku']) ? trim($productData['sku']) : '';
+                    if (!empty($sku)) {
+                        $checkSku = $pdo->prepare("SELECT id, name FROM products WHERE TRIM(sku) = TRIM(:sku) LIMIT 1");
+                        $checkSku->execute([':sku' => $sku]);
+                        $skuRow = $checkSku->fetch(PDO::FETCH_ASSOC);
+                        if ($skuRow) {
+                            $errors[] = "Row " . ($index + 1) . ": SKU '$sku' already exists for product '" . $skuRow['name'] . "' (duplicate SKU)";
+                            continue;
+                        }
+                    }
+                    
+                    // Then check by name (case-insensitive name matching)
                     $checkProduct = $pdo->prepare("SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1");
                     $checkProduct->execute([':name' => $name]);
                     if ($checkProduct->fetch()) {
-                        $errors[] = "Row " . ($index + 1) . ": Product '$name' already exists (duplicate)";
+                        $errors[] = "Row " . ($index + 1) . ": Product '$name' already exists (duplicate name)";
                         continue;
                     }
 
@@ -193,7 +206,7 @@ try {
                         // If category doesn't exist, it will remain null (category will be ignored)
                     }
 
-                    $sku = isset($productData['sku']) ? trim($productData['sku']) : '';
+                    // SKU was already extracted above for duplicate check
                     $mrp = isset($productData['mrp']) ? ((float)$productData['mrp'] > 0 ? (float)$productData['mrp'] : null) : null;
                     $wholesale_rate = isset($productData['wholesale_rate']) ? ((float)$productData['wholesale_rate'] > 0 ? (float)$productData['wholesale_rate'] : null) : null;
                     $stock = isset($productData['stock']) ? max(0, (int)$productData['stock']) : 0;
@@ -203,9 +216,10 @@ try {
                     $brand = isset($productData['brand']) ? trim($productData['brand']) : '';
                     $dimensions = isset($productData['dimensions']) ? trim($productData['dimensions']) : '';
                     $currency = isset($productData['currency']) ? trim($productData['currency']) : 'INR';
+                    $items_per_pack = isset($productData['items_per_pack']) ? max(1, (int)$productData['items_per_pack']) : 1;
 
-                    $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id)
-                            VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id)";
+                    $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id, items_per_pack)
+                            VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id, :items_per_pack)";
                     $st = $pdo->prepare($sql);
                     $st->bindValue(':name', $name);
                     $st->bindValue(':sku', $sku);
@@ -218,6 +232,7 @@ try {
                     $st->bindValue(':dimensions', $dimensions);
                     $st->bindValue(':currency', $currency);
                     $st->bindValue(':category_id', $category_id, $category_id === null ? PDO::PARAM_NULL : PDO::PARAM_INT);
+                    $st->bindValue(':items_per_pack', $items_per_pack);
                     $st->execute();
 
                     $imported++;

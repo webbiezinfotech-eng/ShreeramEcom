@@ -20,9 +20,9 @@ try {
             "rating" => round(mt_rand(35, 50) / 10, 1), // random 3.5–5 rating
             "category" => "Category " . $row["category_id"], // agar category table join karna ho to kar sakte ho
             // LOCAL DEVELOPMENT
-            "image" => "http://localhost:8000/api/uploads/products/" . ($row["sku"] ?? "default.png"),
+            // "image" => "http://localhost:8000/api/uploads/products/" . ($row["sku"] ?? "default.png"),
             // PRODUCTION SERVER
-            // "image" => "https://shreeram.webbiezinfotech.in/api/uploads/products/" . ($row["sku"] ?? "default.png"),
+            "image" => "https://shreeram.webbiezinfotech.in/api/uploads/products/" . ($row["sku"] ?? "default.png"),
             "description" => $row["description"],
             "inStock" => ($row["stock"] > 0 && $row["status"] === "active"),
             "brand" => "Generic"

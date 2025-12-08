@@ -1,7 +1,7 @@
 // PRODUCTION SERVER
-// export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
+export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
 // LOCAL DEVELOPMENT
-export const API_BASE = "http://localhost:8000/api";
+// export const API_BASE = "http://localhost:8000/api";
 
 // ✅ Get products
 export async function getProducts(limit = null, page = 1, search = '') {

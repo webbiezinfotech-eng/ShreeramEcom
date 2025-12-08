@@ -130,11 +130,11 @@ export default function FeaturedProducts() {
             products.map((product) => (
               <div
                 key={product.id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group"
+                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group cursor-pointer"
+                onClick={() => handleProductClick(product.id)}
               >
                 <div 
-                  className="relative h-48 bg-gray-200 cursor-pointer"
-                  onClick={() => handleProductClick(product.id)}
+                  className="relative h-48 bg-gray-200"
                 >
                   {product.image && product.image.trim() !== '' ? (
                     <img
@@ -210,8 +210,7 @@ export default function FeaturedProducts() {
                   </span>
 
                   <h3 
-                    className="font-semibold text-gray-800 mt-2 line-clamp-2 text-sm sm:text-base cursor-pointer hover:text-[#002D7A] transition-colors"
-                    onClick={() => handleProductClick(product.id)}
+                    className="font-semibold text-gray-800 mt-2 line-clamp-2 text-sm sm:text-base hover:text-[#002D7A] transition-colors"
                   >
                     {product.title || product.name}
                   </h3>

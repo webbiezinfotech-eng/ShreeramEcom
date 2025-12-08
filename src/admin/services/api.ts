@@ -2,9 +2,9 @@
 
 // ---------- ENV ----------
 // PRODUCTION SERVER
-// const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
+const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
 // LOCAL DEVELOPMENT
-const API_BASE_URL: string = "http://localhost:8000/api";
+// const API_BASE_URL: string = "http://localhost:8000/api";
 const API_KEY: string = "SHREERAMstore";
 
 // ---------- Low-level fetch helper ----------

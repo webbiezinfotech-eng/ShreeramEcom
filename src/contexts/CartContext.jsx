@@ -3,9 +3,9 @@ import { getCartItems, addToCart, updateCartItem, clearCart, getSessionId } from
 
 // API Base URL for image construction (should match api.js)
 // PRODUCTION SERVER
-// const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
 // LOCAL DEVELOPMENT
-const API_BASE_URL = "http://localhost:8000";
+// const API_BASE_URL = "http://localhost:8000";
 
 const CartContext = createContext();
 

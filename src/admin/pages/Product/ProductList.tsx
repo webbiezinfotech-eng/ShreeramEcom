@@ -108,10 +108,46 @@ const ProductList: React.FC = () => {
     totalItems === 0 ? 0 : Math.min((currentPage - 1) * pageSize + products.length, totalItems);
   const showPagination = totalItems > 0;
 
+  // Download Excel Template for Bulk Upload
+  const downloadTemplate = () => {
+    const worksheetData = [
+      // Header row with all required fields
+      ["Name*", "SKU", "Category*", "MRP*", "Wholesale Rate*", "Stock", "Status", "Description", "Brand", "Dimensions", "Items Per Pack"],
+      // Example row - User can delete this and add their own products
+      ["Example Product Name", "PROD001", "Camlin stationery", "100", "75", "50", "active", "Product description here", "Brand Name", "10x5x2 cm", "1"],
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Products");
+    
+    // Auto-size columns for better readability
+    worksheet['!cols'] = [
+      { wch: 30 }, // Name
+      { wch: 18 }, // SKU
+      { wch: 25 }, // Category
+      { wch: 12 }, // MRP
+      { wch: 18 }, // Wholesale Rate
+      { wch: 10 }, // Stock
+      { wch: 12 }, // Status
+      { wch: 40 }, // Description
+      { wch: 18 }, // Brand
+      { wch: 20 }, // Dimensions
+      { wch: 18 }, // Items Per Pack
+    ];
+    
+    // Set filename with timestamp for uniqueness
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `Product_Bulk_Upload_Template_${timestamp}.xlsx`;
+    
+    XLSX.writeFile(workbook, filename);
+    showAlert('success', `✅ Excel template downloaded as "${filename}"! Fill it with your product data and upload using Bulk Upload button.`);
+  };
+
   // Export to Excel (.xlsx)
   const exportExcel = () => {
     const worksheetData = [
-      ["Name", "SKU", "Category", "MRP", "Wholesale Rate", "Stock", "Status", "Description", "Brand", "Dimensions"],
+      ["Name", "SKU", "Category", "MRP", "Wholesale Rate", "Stock", "Status", "Description", "Brand", "Dimensions", "Items Per Pack"],
       ...products.map((p) => [
         p.name ?? "",
         p.sku ?? "",
@@ -123,6 +159,7 @@ const ProductList: React.FC = () => {
         p.description ?? "",
         p.brand ?? "",
         p.dimensions ?? "",
+        String((p as any).items_per_pack ?? 1),
       ]),
     ];
 
@@ -172,7 +209,7 @@ const ProductList: React.FC = () => {
       const headers = jsonData[0].map((h: any) => String(h || "").toLowerCase().trim());
       
       // Find column indices
-      const nameIdx = headers.findIndex(h => h.includes('name'));
+      const nameIdx = headers.findIndex(h => h.includes('name') && !h.includes('pack'));
       const skuIdx = headers.findIndex(h => h.includes('sku'));
       const categoryIdx = headers.findIndex(h => h.includes('category'));
       const mrpIdx = headers.findIndex(h => h.includes('mrp'));
@@ -182,6 +219,7 @@ const ProductList: React.FC = () => {
       const descIdx = headers.findIndex(h => h.includes('description'));
       const brandIdx = headers.findIndex(h => h.includes('brand'));
       const dimIdx = headers.findIndex(h => h.includes('dimension'));
+      const itemsPerPackIdx = headers.findIndex(h => h.includes('items') && h.includes('pack'));
 
       if (nameIdx === -1) {
         showAlert('error', '❌ "Name" column not found in Excel file');
@@ -191,7 +229,8 @@ const ProductList: React.FC = () => {
 
       // Process rows (skip header)
       const productsToImport = [];
-      const seenProductNames = new Set<string>(); // Track duplicates in this batch
+      const seenProductNames = new Set<string>(); // Track duplicates in this batch by name
+      const seenSkus = new Set<string>(); // Track duplicates in this batch by SKU
       
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
@@ -203,10 +242,20 @@ const ProductList: React.FC = () => {
         // Check for duplicate product name in this batch (case-insensitive)
         const nameLower = name.toLowerCase();
         if (seenProductNames.has(nameLower)) {
-          console.warn(`Row ${i + 1}: Skipping duplicate product "${name}" in Excel file`);
+          console.warn(`Row ${i + 1}: Skipping duplicate product name "${name}" in Excel file`);
           continue; // Skip duplicate in same file
         }
         seenProductNames.add(nameLower);
+
+        // Check for duplicate SKU in this batch
+        const sku = skuIdx >= 0 ? String(row[skuIdx] || "").trim() : "";
+        if (sku && seenSkus.has(sku)) {
+          console.warn(`Row ${i + 1}: Skipping duplicate SKU "${sku}" in Excel file`);
+          continue; // Skip duplicate SKU in same file
+        }
+        if (sku) {
+          seenSkus.add(sku);
+        }
 
         // Find category by name (case-insensitive matching)
         let categoryId = null;
@@ -234,6 +283,7 @@ const ProductList: React.FC = () => {
           description: descIdx >= 0 ? String(row[descIdx] || "").trim() : "",
           brand: brandIdx >= 0 ? String(row[brandIdx] || "").trim() : "",
           dimensions: dimIdx >= 0 ? String(row[dimIdx] || "").trim() : "",
+          items_per_pack: itemsPerPackIdx >= 0 ? Math.max(1, parseInt(String(row[itemsPerPackIdx] || "1")) || 1) : 1,
           currency: "INR"
         };
 
@@ -363,8 +413,9 @@ const ProductList: React.FC = () => {
             />
             <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <button onClick={() => navigate("/admin/products/add")} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">📦 Add New Product</button>
+            <button onClick={downloadTemplate} className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">📋 Download Template</button>
             <button onClick={exportExcel} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">📊 Export Products</button>
             <button 
               onClick={handleUploadClick} 

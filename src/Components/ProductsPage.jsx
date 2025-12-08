@@ -9,7 +9,7 @@ import {
   FaPlus,
   FaMinus,
 } from "react-icons/fa";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { getProducts, getCategories, canSeePrices } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
@@ -17,13 +17,13 @@ import Toast from "./Toast";
 import LoginPrompt from "./LoginPrompt";
 
 function ProductsPage() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialSearch = searchParams.get('q') || "";
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [categories, setCategories] = useState([]);
-  const [priceRange, setPriceRange] = useState([0, 1000]);
-  const [sortBy, setSortBy] = useState("featured");
+  const [sortBy, setSortBy] = useState("name"); // Default to A-Z
   const [showFilters, setShowFilters] = useState(false);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -75,9 +75,14 @@ function ProductsPage() {
 
   // ✅ Filter products
   const filteredProducts = products.filter((product) => {
-    const matchesSearch =
-      product.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.description?.toLowerCase().includes(searchTerm.toLowerCase());
+    // Enhanced search - check name, title, description, category, brand, SKU
+    const searchLower = searchTerm.toLowerCase().trim();
+    const matchesSearch = !searchLower || 
+      (product.title || product.name || '').toLowerCase().includes(searchLower) ||
+      (product.description || '').toLowerCase().includes(searchLower) ||
+      (product.category || product.category_name || '').toLowerCase().includes(searchLower) ||
+      (product.brand || '').toLowerCase().includes(searchLower) ||
+      (product.sku || '').toLowerCase().includes(searchLower);
 
     // Match category by name or category_id
     let matchesCategory = true;
@@ -92,25 +97,27 @@ function ProductsPage() {
       }
     }
 
-    const matchesPrice =
-      product.price >= priceRange[0] && product.price <= priceRange[1];
-
-    return matchesSearch && matchesCategory && matchesPrice;
+    return matchesSearch && matchesCategory;
   });
 
   // ✅ Sort products
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     switch (sortBy) {
       case "price-low":
-        return a.price - b.price;
+        return (parseFloat(a.price || 0)) - (parseFloat(b.price || 0));
       case "price-high":
-        return b.price - a.price;
+        return (parseFloat(b.price || 0)) - (parseFloat(a.price || 0));
       case "rating":
         return (b.rating || 0) - (a.rating || 0);
       case "name":
-        return a.title.localeCompare(b.title);
+        const nameA = (a.title || a.name || '').toLowerCase();
+        const nameB = (b.title || b.name || '').toLowerCase();
+        return nameA.localeCompare(nameB);
       default:
-        return 0;
+        // Default to A-Z sorting
+        const defaultNameA = (a.title || a.name || '').toLowerCase();
+        const defaultNameB = (b.title || b.name || '').toLowerCase();
+        return defaultNameA.localeCompare(defaultNameB);
     }
   });
 
@@ -272,27 +279,6 @@ function ProductsPage() {
                 </select>
               </div>
 
-              {/* Price */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Price Range: ₹{priceRange[0]} - ₹{priceRange[1]}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1000"
-                  value={priceRange[1]}
-                  onChange={(e) =>
-                    setPriceRange([priceRange[0], parseInt(e.target.value)])
-                  }
-                  className="w-full"
-                />
-                <div className="flex justify-between text-sm text-gray-500 mt-1">
-                  <span>₹0</span>
-                  <span>₹1000</span>
-                </div>
-              </div>
-
               {/* Sort */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -303,11 +289,11 @@ function ProductsPage() {
                   onChange={(e) => setSortBy(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
                 >
-                  <option value="featured">Featured</option>
+                  <option value="name">Name A-Z</option>
                   <option value="price-low">Price: Low to High</option>
                   <option value="price-high">Price: High to Low</option>
                   <option value="rating">Highest Rated</option>
-                  <option value="name">Name A-Z</option>
+                  <option value="featured">Featured</option>
                 </select>
               </div>
             </div>
@@ -349,7 +335,14 @@ function ProductsPage() {
                 sortedProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col"
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col cursor-pointer"
+                  onClick={() => {
+                    if (canSeePrices()) {
+                      navigate(`/product/${product.id}`);
+                    } else {
+                      setShowLoginPrompt(true);
+                    }
+                  }}
                 >
                   <div className="relative h-48 bg-gray-200">
                     {product.image && product.image.trim() !== '' ? (
@@ -410,6 +403,7 @@ function ProductsPage() {
                       </button>
                       <Link
                         to={`/product/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
                       >
                         <FaEye className="text-gray-400 hover:text-blue-500" />
@@ -480,6 +474,7 @@ function ProductsPage() {
                     <div className="space-y-2 mt-auto">
                       <Link
                         to={`/product/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
                         <FaEye size={14} className="sm:w-4 sm:h-4" />

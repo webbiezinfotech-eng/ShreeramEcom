@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { FaSearch, FaFilter, FaShoppingCart, FaStar, FaHeart, FaEye, FaArrowLeft } from "react-icons/fa";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { getProducts, getProductsByCategory, getCategories, canSeePrices } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
@@ -9,6 +9,7 @@ import Toast from "./Toast";
 import LoginPrompt from "./LoginPrompt";
 
 function CategoryPage() {
+  const navigate = useNavigate();
   const { category } = useParams();
   const [searchTerm, setSearchTerm] = useState("");
   const [priceRange, setPriceRange] = useState([0, 10000]);
@@ -491,7 +492,17 @@ function CategoryPage() {
             {/* Products Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
               {sortedProducts.map((product) => (
-                <div key={product.id} className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+                <div 
+                  key={product.id} 
+                  className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col cursor-pointer"
+                  onClick={() => {
+                    if (canSeePrices()) {
+                      navigate(`/product/${product.id}`);
+                    } else {
+                      setShowLoginPrompt(true);
+                    }
+                  }}
+                >
                   {/* Product Image */}
                   <div className="relative h-48 bg-gray-200">
                     {product.image && product.image.trim() !== '' ? (
@@ -609,13 +620,17 @@ function CategoryPage() {
                     <div className="space-y-2 mt-auto">
                       <Link
                         to={`/product/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
                         <FaEye size={14} className="sm:w-4 sm:h-4" />
                         View Details
                       </Link>
                       <button
-                        onClick={() => handleAddToCart(product)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddToCart(product);
+                        }}
                         className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
                       >
                         <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />

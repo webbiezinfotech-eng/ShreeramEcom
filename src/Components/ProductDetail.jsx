@@ -52,9 +52,9 @@ function ProductDetail() {
           let imageUrl = data.item.image;
           if (imageUrl && !imageUrl.startsWith('http')) {
             // LOCAL DEVELOPMENT
-            imageUrl = `http://localhost:8000/${imageUrl}`;
+            // imageUrl = `http://localhost:8000/${imageUrl}`;
             // PRODUCTION SERVER
-            // imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+            imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
           }
           setProduct({ ...data.item, image: imageUrl });
           
