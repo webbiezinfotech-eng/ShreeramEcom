@@ -75,6 +75,11 @@ function ProductsPage() {
 
   // ✅ Filter products
   const filteredProducts = products.filter((product) => {
+    // Hide inactive products completely
+    if (product.status === 'inactive') {
+      return false;
+    }
+
     // Enhanced search - check name, title, description, category, brand, SKU
     const searchLower = searchTerm.toLowerCase().trim();
     const matchesSearch = !searchLower || 
@@ -361,7 +366,7 @@ function ProductsPage() {
                       <span className="text-gray-400 text-2xl font-bold">{(product.title || product.name || 'P').charAt(0).toUpperCase()}</span>
                     </div>
                     {/* Out of Stock Overlay */}
-                    {product.status !== 'active' && (
+                    {product.status === 'out_of_stock' && (
                       <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
                         <span className="bg-red-600 text-white text-sm font-bold px-4 py-2 rounded-lg shadow-lg">
                           OUT OF STOCK
@@ -373,11 +378,11 @@ function ProductsPage() {
                         <span className="bg-[#FE7F06] text-white text-xs font-medium px-2 py-1 rounded">
                           Best Seller
                         </span>
-                      ) : (
+                      ) : product.status === 'out_of_stock' ? (
                         <span className="bg-red-600 text-white text-xs font-medium px-2 py-1 rounded">
                           Out of Stock
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     <div className="absolute top-2 right-2 flex flex-col gap-1">
                       <button
@@ -482,7 +487,7 @@ function ProductsPage() {
                       </Link>
                       
                       {/* Quantity Selector & Add to Cart */}
-                      {canSeePrices() && product.status === 'active' ? (
+                      {canSeePrices() && product.status === 'active' && product.status !== 'out_of_stock' ? (
                         <div>
                           {showQuantitySelector[product.id] ? (
                             <div className="flex items-center gap-2">
@@ -551,7 +556,7 @@ function ProductsPage() {
                             </button>
                           )}
                         </div>
-                      ) : product.status !== 'active' ? (
+                      ) : product.status === 'out_of_stock' ? (
                         <div className="w-full bg-red-100 border border-red-300 text-red-700 font-medium py-2 px-3 sm:px-4 rounded-lg text-sm sm:text-base text-center">
                           Out of Stock
                         </div>

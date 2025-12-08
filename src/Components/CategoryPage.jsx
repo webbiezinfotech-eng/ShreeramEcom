@@ -309,6 +309,11 @@ function CategoryPage() {
   const categoryProducts = getCategoryProducts();
 
   const filteredProducts = categoryProducts.filter(product => {
+    // Hide inactive products completely
+    if (product.status === 'inactive') {
+      return false;
+    }
+
     const matchesSearch = 
       (product.title || product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());

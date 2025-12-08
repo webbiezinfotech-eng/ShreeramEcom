@@ -101,7 +101,15 @@ try {
             $where = 'WHERE (' . implode(' OR ', $likeParts) . ')';
         }
 
-        $countSql = "SELECT COUNT(*) FROM products p " . ($where ? $where : "");
+        // Check if request is from admin (admin should see all products including inactive)
+        // Admin requests come with API key, so we check if API key is present
+        $isAdminRequest = isset($_SERVER['HTTP_X_API_KEY']) || isset($_GET['api_key']);
+        
+        // Build WHERE clause - admin sees all, website only sees active/out_of_stock
+        $statusFilter = $isAdminRequest ? '' : " AND p.status != 'inactive'";
+        $whereClause = $where ? $where . $statusFilter : ($statusFilter ? "WHERE" . substr($statusFilter, 4) : "");
+        
+        $countSql = "SELECT COUNT(*) FROM products p " . $whereClause;
         $countStmt = $pdo->prepare($countSql);
         if ($q !== '') {
             foreach ($searchColumns as $idx => $_) {
@@ -116,7 +124,7 @@ try {
                    (SELECT image_url FROM product_images WHERE product_id = p.id ORDER BY created_at DESC LIMIT 1) as image
             FROM products p
             LEFT JOIN categories c ON c.id = p.category_id
-            " . ($where ? $where : "") . "
+            " . $whereClause . "
             ORDER BY p.id DESC
             LIMIT $limit OFFSET $offset
         ";
@@ -211,12 +219,14 @@ try {
                     $wholesale_rate = isset($productData['wholesale_rate']) ? ((float)$productData['wholesale_rate'] > 0 ? (float)$productData['wholesale_rate'] : null) : null;
                     $stock = isset($productData['stock']) ? max(0, (int)$productData['stock']) : 0;
                     $status = isset($productData['status']) ? trim($productData['status']) : 'active';
-                    if (!in_array($status, ['active', 'inactive'])) $status = 'active';
+                    if (!in_array($status, ['active', 'inactive', 'out_of_stock'])) $status = 'active';
                     $description = isset($productData['description']) ? trim($productData['description']) : '';
                     $brand = isset($productData['brand']) ? trim($productData['brand']) : '';
                     $dimensions = isset($productData['dimensions']) ? trim($productData['dimensions']) : '';
                     $currency = isset($productData['currency']) ? trim($productData['currency']) : 'INR';
-                    $items_per_pack = isset($productData['items_per_pack']) ? max(1, (int)$productData['items_per_pack']) : 1;
+                    // Default to 1 if empty/null/0, otherwise use provided value
+                    $items_per_pack_raw = isset($productData['items_per_pack']) ? trim($productData['items_per_pack']) : '';
+                    $items_per_pack = ($items_per_pack_raw === '' || $items_per_pack_raw === '0' || (int)$items_per_pack_raw === 0) ? 1 : max(1, (int)$items_per_pack_raw);
 
                     $sql = "INSERT INTO products (name, sku, mrp, wholesale_rate, stock, status, description, brand, dimensions, currency, category_id, items_per_pack)
                             VALUES (:name, :sku, :mrp, :wholesale_rate, :stock, :status, :description, :brand, :dimensions, :currency, :category_id, :items_per_pack)";
@@ -257,12 +267,18 @@ try {
         $wholesale_rate = isset($body['wholesale_rate']) ? (float)$body['wholesale_rate'] : null;
         $stock = isset($body['stock']) ? (int)$body['stock'] : 0;
         $status = isset($body['status']) ? trim($body['status']) : 'active';
+        // Validate status - only allow valid values
+        if (!in_array($status, ['active', 'inactive', 'out_of_stock'])) {
+            $status = 'active'; // Default to active if invalid
+        }
         $description = isset($body['description']) ? trim($body['description']) : '';
         $brand = isset($body['brand']) ? trim($body['brand']) : '';
         $dimensions = isset($body['dimensions']) ? trim($body['dimensions']) : '';
         $currency = isset($body['currency']) ? trim($body['currency']) : 'INR';
         $category_id = isset($body['category_id']) && $body['category_id'] !== '' ? (int)$body['category_id'] : null;
-        $items_per_pack = isset($body['items_per_pack']) ? max(1, (int)$body['items_per_pack']) : 1;
+        // Default to 1 if empty/null/0, otherwise use provided value
+        $items_per_pack_raw = isset($body['items_per_pack']) ? trim($body['items_per_pack']) : '';
+        $items_per_pack = ($items_per_pack_raw === '' || $items_per_pack_raw === '0' || (int)$items_per_pack_raw === 0) ? 1 : max(1, (int)$items_per_pack_raw);
 
         if ($name === '') throw new Exception('name is required');
 
@@ -508,6 +524,15 @@ try {
             $sets[] = "$key = $param";
 
             $val = $body[$key];
+            
+            // Validate status field
+            if ($key === 'status') {
+                $val = trim($val);
+                if (!in_array($val, ['active', 'inactive', 'out_of_stock'])) {
+                    $val = 'active'; // Default to active if invalid
+                }
+            }
+            
             if ($type === 'float') $val = (float)$val;
             if ($type === 'int') $val = (int)$val;
 
@@ -585,16 +610,21 @@ try {
         exit;
     }
 
-  /* ----------------- DELETE (SOFT) ----------------- */
+  /* ----------------- DELETE (HARD DELETE) ----------------- */
 if ($method === 'DELETE') {
     if (!isset($_GET['id'])) { http_response_code(400); echo json_encode(['ok'=>false,'error'=>'id required']); exit; }
     $id = (int)$_GET['id'];
 
-    // hard delete NAHI — sirf status ko inactive
-    $st = $pdo->prepare("UPDATE products SET status = 'inactive' WHERE id = :id");
+    // Hard delete - completely remove from database
+    // First delete product images
+    $imgSt = $pdo->prepare("DELETE FROM product_images WHERE product_id = :id");
+    $imgSt->execute([':id' => $id]);
+    
+    // Then delete the product
+    $st = $pdo->prepare("DELETE FROM products WHERE id = :id");
     $st->execute([':id' => $id]);
 
-    echo json_encode(['ok' => true, 'updated' => $st->rowCount()], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => true, 'deleted' => $st->rowCount()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

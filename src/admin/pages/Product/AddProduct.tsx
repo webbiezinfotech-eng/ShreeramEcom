@@ -36,7 +36,7 @@ const AddProduct: React.FC = () => {
     dimensions: "",
     category_id: "",
     status: "active",
-    items_per_pack: "1",
+    items_per_pack: "",
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -177,7 +177,7 @@ const AddProduct: React.FC = () => {
       dimensions: "",
       category_id: "",
       status: "active",
-      items_per_pack: "1",
+      items_per_pack: "",
     });
     setImageFile(null);
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
@@ -202,7 +202,7 @@ const AddProduct: React.FC = () => {
       formData.append("dimensions", form.dimensions);
       formData.append("status", form.status);
       formData.append("currency", "INR");
-      formData.append("items_per_pack", form.items_per_pack || "1");
+      formData.append("items_per_pack", form.items_per_pack || "");
       
       if (form.category_id) {
         formData.append("category_id", form.category_id);
@@ -382,10 +382,9 @@ const AddProduct: React.FC = () => {
                 <input
                   type="number"
                   name="items_per_pack"
-                  value={form.items_per_pack || "1"}
+                  value={form.items_per_pack}
                   onChange={handleChange}
-                  min="1"
-                  required
+                  min="0"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., 10 (1 box = 10 packets)"
                 />
@@ -431,6 +430,7 @@ const AddProduct: React.FC = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="active">Active</option>
+                  <option value="out_of_stock">Out of Stock</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>

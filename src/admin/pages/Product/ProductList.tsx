@@ -56,6 +56,9 @@ const ProductList: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedProducts, setSelectedProducts] = useState<number[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   
   // Show alert function
   const showAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
@@ -88,6 +91,11 @@ const ProductList: React.FC = () => {
 
     return () => clearTimeout(handler);
   }, [searchInput, setCurrentPage, setSearchTerm]);
+
+  // Clear selection when products change (page change, search, etc.)
+  useEffect(() => {
+    setSelectedProducts([]);
+  }, [currentPage, searchTerm]);
 
   const paginationRange = useMemo(() => {
     const pages: number[] = [];
@@ -283,7 +291,7 @@ const ProductList: React.FC = () => {
           description: descIdx >= 0 ? String(row[descIdx] || "").trim() : "",
           brand: brandIdx >= 0 ? String(row[brandIdx] || "").trim() : "",
           dimensions: dimIdx >= 0 ? String(row[dimIdx] || "").trim() : "",
-          items_per_pack: itemsPerPackIdx >= 0 ? Math.max(1, parseInt(String(row[itemsPerPackIdx] || "1")) || 1) : 1,
+          items_per_pack: itemsPerPackIdx >= 0 ? (String(row[itemsPerPackIdx] || "").trim() || "") : "",
           currency: "INR"
         };
 
@@ -366,9 +374,64 @@ const ProductList: React.FC = () => {
   const handleDelete = async (id: number) => {
     try { 
       await deleteProduct(id); 
-      showAlert('success', '✅ Product deactivated successfully!');
+      showAlert('success', '✅ Product deleted successfully!');
+      setSelectedProducts(prev => prev.filter(pId => pId !== id));
     } catch (err) { 
-      showAlert('error', '❌ Error deactivating product');
+      showAlert('error', '❌ Error deleting product');
+    }
+  };
+
+  // Handle checkbox selection
+  const handleSelectProduct = (productId: number) => {
+    setSelectedProducts(prev => 
+      prev.includes(productId) 
+        ? prev.filter(id => id !== productId)
+        : [...prev, productId]
+    );
+  };
+
+  // Handle select all
+  const handleSelectAll = () => {
+    if (selectedProducts.length === products.length) {
+      setSelectedProducts([]);
+    } else {
+      setSelectedProducts(products.map(p => p.id));
+    }
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (selectedProducts.length === 0) return;
+    
+    setBulkDeleting(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const productId of selectedProducts) {
+        try {
+          await deleteProduct(productId);
+          successCount++;
+        } catch (err) {
+          failCount++;
+          console.error(`Failed to delete product ${productId}:`, err);
+        }
+      }
+      
+      setSelectedProducts([]);
+      setShowBulkDeleteConfirm(false);
+      
+      if (failCount === 0) {
+        showAlert('success', `✅ Successfully deleted ${successCount} product(s)!`);
+      } else {
+        showAlert('warning', `⚠️ Deleted ${successCount} product(s), ${failCount} failed.`);
+      }
+      
+      await fetchProducts();
+    } catch (err) {
+      showAlert('error', '❌ Error during bulk delete');
+    } finally {
+      setBulkDeleting(false);
     }
   };
   const handleUpdate = async (id: number, data: Partial<Product>) => {
@@ -424,6 +487,13 @@ const ProductList: React.FC = () => {
             >
               {uploading ? "⏳ Uploading..." : "📥 Bulk Upload"}
             </button>
+            <button 
+              onClick={() => setShowBulkDeleteConfirm(true)}
+              disabled={selectedProducts.length === 0 || bulkDeleting}
+              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg font-medium transition-colors"
+            >
+              {bulkDeleting ? "⏳ Deleting..." : `🗑️ Bulk Delete (${selectedProducts.length})`}
+            </button>
             <input
               ref={fileInputRef}
               type="file"
@@ -446,6 +516,14 @@ const ProductList: React.FC = () => {
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 w-12">
+                    <input
+                      type="checkbox"
+                      checked={products.length > 0 && selectedProducts.length === products.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-4 py-3 w-16">#</th>
                   <th className="px-4 py-3 w-64">Product</th>
                   <th className="px-4 py-3 w-32">SKU</th>
@@ -460,6 +538,15 @@ const ProductList: React.FC = () => {
               <tbody>
                 {products.map((product, index) => (
                   <tr key={product.id} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedProducts.includes(product.id)}
+                        onChange={() => handleSelectProduct(product.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-4 py-3 text-gray-500 font-medium">
                       {startItem + index}
                     </td>
@@ -509,6 +596,8 @@ const ProductList: React.FC = () => {
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         product.status === "active"
                           ? "bg-green-100 text-green-800"
+                          : product.status === "out_of_stock"
+                          ? "bg-yellow-100 text-yellow-800"
                           : "bg-red-100 text-red-800"
                       }`}>
                         {product.status || "inactive"}
@@ -553,7 +642,7 @@ const ProductList: React.FC = () => {
                 ))}
                 {products.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-6 py-10 text-center text-gray-500">
+                    <td colSpan={10} className="px-6 py-10 text-center text-gray-500">
                       No products found
                     </td>
                   </tr>
@@ -631,6 +720,71 @@ const ProductList: React.FC = () => {
           onDelete={() => handleDelete(deletingProduct.id)}
         />
       )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-red-600">Bulk Delete Products</h3>
+              <button 
+                className="text-gray-500 hover:text-gray-700" 
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={bulkDeleting}
+              >
+                ✖
+              </button>
+            </div>
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">
+                    Are you sure you want to delete {selectedProducts.length} product(s)?
+                  </p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    This action cannot be undone. Products will be permanently deleted from database.
+                  </p>
+                </div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto">
+                <p className="text-xs font-medium text-gray-700 mb-2">Selected Products:</p>
+                <ul className="text-xs text-gray-600 space-y-1">
+                  {products
+                    .filter(p => selectedProducts.includes(p.id))
+                    .slice(0, 5)
+                    .map(p => (
+                      <li key={p.id}>• {p.name}</li>
+                    ))}
+                  {selectedProducts.length > 5 && (
+                    <li className="text-gray-500">... and {selectedProducts.length - 5} more</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                disabled={bulkDeleting}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              >
+                {bulkDeleting ? "Deleting..." : `Delete ${selectedProducts.length} Product(s)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -645,12 +799,12 @@ type EditForm = {
   mrp: number;
   wholesale_rate: number;
   stock: number;
-  status: "active" | "inactive";
+  status: "active" | "inactive" | "out_of_stock";
   description?: string;
   brand?: string;
   dimensions?: string;
   category_id?: number | "";
-  items_per_pack?: number;
+  items_per_pack?: string | number;
 };
 
 const EditProductModal: React.FC<{
@@ -671,7 +825,7 @@ const EditProductModal: React.FC<{
     brand: product.brand || "",
     dimensions: product.dimensions || "",
     category_id: product.category_id ?? "",
-    items_per_pack: Number((product as any).items_per_pack || 1),
+    items_per_pack: (product as any).items_per_pack ? String((product as any).items_per_pack) : "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -684,8 +838,10 @@ const EditProductModal: React.FC<{
     setForm((f) => ({
       ...f,
       [name]:
-        name === "mrp" || name === "wholesale_rate" || name === "stock" || name === "items_per_pack"
+        name === "mrp" || name === "wholesale_rate" || name === "stock"
           ? Number(value)
+          : name === "items_per_pack"
+            ? (value === "" ? "" : value) // Keep as string, allow empty
           : name === "category_id"
             ? (value === "" ? "" : Number(value))
             : value,
@@ -717,7 +873,7 @@ const EditProductModal: React.FC<{
         formData.append("brand", form.brand || "");
         formData.append("dimensions", form.dimensions || "");
         formData.append("currency", "INR");
-        formData.append("items_per_pack", String(form.items_per_pack || 1));
+        formData.append("items_per_pack", String(form.items_per_pack || ""));
         if (form.category_id !== "" && form.category_id !== null) {
           formData.append("category_id", String(form.category_id));
         }
@@ -798,6 +954,7 @@ const EditProductModal: React.FC<{
             <label className="text-sm text-gray-600">Status</label>
             <select name="status" value={form.status} onChange={change} className="mt-1 w-full border rounded-lg px-3 py-2">
               <option value="active">active</option>
+              <option value="out_of_stock">out_of_stock</option>
               <option value="inactive">inactive</option>
             </select>
           </div>
@@ -818,9 +975,9 @@ const EditProductModal: React.FC<{
             <input 
               type="number" 
               name="items_per_pack" 
-              value={form.items_per_pack || 1} 
+              value={form.items_per_pack || ""} 
               onChange={change} 
-              min="1"
+              min="0"
               className="mt-1 w-full border rounded-lg px-3 py-2" 
             />
             <p className="text-xs text-gray-500 mt-1">How many items in 1 pack/box (e.g., 10)</p>
@@ -882,22 +1039,25 @@ const DeleteConfirm: React.FC<{
     setBusy(true);
     setError(null);
     try { await onDelete(); onClose(); }
-    catch (e: any) { setError(e?.message || "Failed to deactivate"); }
+    catch (e: any) { setError(e?.message || "Failed to delete"); }
     finally { setBusy(false); }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
-        <h3 className="text-lg font-semibold mb-2">Deactivate Product</h3>
+        <h3 className="text-lg font-semibold mb-2 text-red-600">Delete Product</h3>
         <p className="text-sm text-gray-600">
-          Are you sure you want to deactivate <span className="font-medium">{product.name}</span>?
+          Are you sure you want to permanently delete <span className="font-medium">{product.name}</span>?
+        </p>
+        <p className="text-xs text-red-600 mt-2">
+          This action cannot be undone. The product will be completely removed from the database.
         </p>
         {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
         <div className="mt-6 flex justify-end gap-3">
           <button className="px-4 py-2 rounded-lg border" onClick={onClose} disabled={busy}>Cancel</button>
           <button className="px-4 py-2 rounded-lg bg-red-600 text-white disabled:opacity-50" onClick={submit} disabled={busy}>
-            {busy ? "Deactivating..." : "Deactivate"}
+            {busy ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>

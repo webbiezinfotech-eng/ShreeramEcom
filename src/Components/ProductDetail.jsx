@@ -52,25 +52,25 @@ function ProductDetail() {
           let imageUrl = data.item.image;
           if (imageUrl && !imageUrl.startsWith('http')) {
             // LOCAL DEVELOPMENT
-            // imageUrl = `http://localhost:8000/${imageUrl}`;
+            imageUrl = `http://localhost:8000/${imageUrl}`;
             // PRODUCTION SERVER
-            imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+            // imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
           }
           setProduct({ ...data.item, image: imageUrl });
           
           // Fetch related products from same category
           if (data.item.category_id) {
             const related = await getProductsByCategory(data.item.category_id, 8);
-            // Exclude current product and limit to 4
+            // Exclude current product, inactive products, and limit to 4
             const filtered = related
-              .filter(p => p.id !== parseInt(id))
+              .filter(p => p.id !== parseInt(id) && p.status !== 'inactive')
               .slice(0, 4);
             setRelatedProducts(filtered);
           } else {
             // If no category, fetch recent products
             const recent = await getProducts(4, 1);
             const filtered = recent
-              .filter(p => p.id !== parseInt(id))
+              .filter(p => p.id !== parseInt(id) && p.status !== 'inactive')
               .slice(0, 4);
             setRelatedProducts(filtered);
           }
