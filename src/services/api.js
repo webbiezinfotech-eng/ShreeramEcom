@@ -1,7 +1,7 @@
 // PRODUCTION SERVER
-// export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
+export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
 // LOCAL DEVELOPMENT - Use Mac IP for phone testing
-export const API_BASE = "http://192.168.1.6:8000/api";
+// export const API_BASE = "http://192.168.1.6:8000/api";
 // For Mac browser testing, you can also use: "http://localhost:8000/api"
 
 // ✅ Get products

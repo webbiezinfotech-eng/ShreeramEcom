@@ -3,9 +3,9 @@ import { getCartItems, addToCart, updateCartItem, clearCart, getSessionId } from
 
 // API Base URL for image construction (should match api.js)
 // PRODUCTION SERVER
-// const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
 // LOCAL DEVELOPMENT - Use Mac IP for phone testing
-const API_BASE_URL = "http://192.168.1.6:8000";
+// const API_BASE_URL = "http://192.168.1.6:8000";
 // For Mac browser testing, you can also use: "http://localhost:8000"
 
 const CartContext = createContext();
@@ -85,15 +85,27 @@ export const CartProvider = ({ children }) => {
         });
         setCartItems(mappedItems);
         
-        // Always show notification if cart has items (unless user manually closed it)
-        // This ensures notification persists across navigation
+        // IMPORTANT: Only show notification if cart has items AND items were just added
+        // Don't show notification on initial page load or cart refresh
+        // Notification should only appear when user actively adds items
         if (mappedItems.length > 0) {
+          // Check if this is a fresh load (no saved notification state)
+          // If notification state exists and is 'true', it means user added items before
+          // Otherwise, don't show notification on initial load
           const savedNotificationState = localStorage.getItem('show_cart_notification');
-          // If notification was never manually closed, or if it was shown before, show it
-          if (savedNotificationState !== 'false') {
+          // Only show if it was explicitly set to 'true' (meaning items were just added)
+          // Don't show on initial page load for existing cart items
+          if (savedNotificationState === 'true') {
             setShowCartNotification(true);
-            localStorage.setItem('show_cart_notification', 'true');
+          } else {
+            // Fresh load - don't show notification, let user add items first
+            setShowCartNotification(false);
+            // Don't set to 'false' here, leave it null so it can be set when items are added
           }
+        } else {
+          // Cart is empty - hide notification
+          setShowCartNotification(false);
+          localStorage.removeItem('show_cart_notification');
         }
         
         // Update session ID if returned
@@ -115,33 +127,54 @@ export const CartProvider = ({ children }) => {
     const handleStorageChange = (e) => {
       if (e.key === 'customer_id') {
         const newCustomerId = e.newValue;
+        const oldCustomerId = customerId;
         setCustomerId(newCustomerId);
+        // If customer ID changed (login/logout), clear notification state
+        if (newCustomerId !== oldCustomerId) {
+          setShowCartNotification(false);
+          localStorage.removeItem('show_cart_notification');
+        }
         // Reload cart when customer ID changes
         if (newCustomerId) {
           loadCartItems();
         } else {
           setCartItems([]);
+          setShowCartNotification(false);
+          localStorage.removeItem('show_cart_notification');
         }
       }
     };
     
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, [loadCartItems]);
+  }, [loadCartItems, customerId]);
 
   // Watch for customer_id changes in localStorage (same tab) and custom events
   useEffect(() => {
     const checkCustomerId = () => {
       const storedCustomerId = localStorage.getItem('customer_id');
       if (storedCustomerId !== customerId) {
+        const oldCustomerId = customerId;
         setCustomerId(storedCustomerId);
+        // If customer ID changed (login/logout), clear notification state
+        if (storedCustomerId !== oldCustomerId) {
+          setShowCartNotification(false);
+          localStorage.removeItem('show_cart_notification');
+        }
       }
     };
     
     // Listen for custom login event
     const handleCustomerLogin = (e) => {
       if (e.detail && e.detail.id) {
-        setCustomerId(e.detail.id.toString());
+        const newCustomerId = e.detail.id.toString();
+        const oldCustomerId = customerId;
+        setCustomerId(newCustomerId);
+        // Clear notification state on login - will be restored when cart loads with actual items
+        if (newCustomerId !== oldCustomerId) {
+          setShowCartNotification(false);
+          localStorage.removeItem('show_cart_notification');
+        }
       }
     };
     
@@ -310,9 +343,13 @@ export const CartProvider = ({ children }) => {
   // Load cart items when component mounts or customer changes
   useEffect(() => {
     if (sessionId) {
+      // Clear notification state before loading cart
+      // This ensures fresh state for new users
+      setShowCartNotification(false);
+      localStorage.removeItem('show_cart_notification');
       loadCartItems();
     }
-  }, [customerId, sessionId]);
+  }, [customerId, sessionId, loadCartItems]);
 
   // Clear cart on logout
   useEffect(() => {
@@ -344,27 +381,15 @@ export const CartProvider = ({ children }) => {
   }, [showCartNotification, cartItems.length]);
 
   // Hide notification only when cart is completely empty (order placed or cart cleared)
-  // Show notification if cart has items and it was previously shown
+  // IMPORTANT: Don't auto-show notification on page load - only when items are actively added
   useEffect(() => {
     if (cartItems.length === 0) {
       // Cart is empty - hide notification permanently
       setShowCartNotification(false);
       localStorage.removeItem('show_cart_notification');
-    } else {
-      // Cart has items - always show notification unless user manually closed it
-      const savedNotificationState = localStorage.getItem('show_cart_notification');
-      if (savedNotificationState === 'true') {
-        // Notification was shown before - keep it visible
-        if (!showCartNotification) {
-          setShowCartNotification(true);
-        }
-      } else if (savedNotificationState === null || savedNotificationState === '') {
-        // No saved state - show notification (first time adding items)
-        setShowCartNotification(true);
-        localStorage.setItem('show_cart_notification', 'true');
-      }
-      // If savedNotificationState === 'false', user manually closed it - don't show
     }
+    // Don't auto-show notification when cart has items on page load
+    // Notification will only show when addItemToCart is called (which sets it explicitly)
   }, [cartItems.length]);
 
   const value = {

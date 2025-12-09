@@ -31,28 +31,100 @@ function hasPasswordColumn($pdo) {
 }
 
 switch ($method) {
-    // ✅ Login endpoint (GET with email and password)
+    // ✅ Login endpoint (GET with email/phone and password)
     case 'GET':
         // Check if this is a login request
         if (isset($_GET['email']) && isset($_GET['password'])) {
-            $email = trim($_GET['email'] ?? '');
+            $emailOrPhone = trim($_GET['email'] ?? '');
             $password = $_GET['password'] ?? '';
             
-            if (empty($email) || empty($password)) {
-                respond(['ok' => false, 'error' => 'Email and password required'], 400);
+            if (empty($emailOrPhone) || empty($password)) {
+                respond(['ok' => false, 'error' => 'Email/Phone and password required'], 400);
             }
             
             // Check if password_hash column exists
             $hasPasswordCol = hasPasswordColumn($pdo);
             
             if ($hasPasswordCol) {
-                // Find customer by email
-                $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE email = ? LIMIT 1");
-                $st->execute([$email]);
-                $customer = $st->fetch(PDO::FETCH_ASSOC);
+                // Determine if input is email or phone
+                // Remove spaces, dashes, parentheses from phone number
+                $cleanedInput = preg_replace('/[\s\-\(\)]/', '', trim($emailOrPhone));
+                $isEmail = filter_var($emailOrPhone, FILTER_VALIDATE_EMAIL);
+                $isPhone = preg_match('/^[0-9]{10}$/', $cleanedInput);
+                
+                if (!$isEmail && !$isPhone) {
+                    // Check if it's all digits but wrong length
+                    if (preg_match('/^[0-9]+$/', $cleanedInput)) {
+                        if (strlen($cleanedInput) < 10) {
+                            respond(['ok' => false, 'error' => 'Phone number must be 10 digits'], 400);
+                        } else if (strlen($cleanedInput) > 10) {
+                            respond(['ok' => false, 'error' => 'Phone number must be exactly 10 digits'], 400);
+                        }
+                    }
+                    respond(['ok' => false, 'error' => 'Please enter a valid email address or 10-digit phone number'], 400);
+                }
+                
+                // Use cleaned input for phone lookup
+                $lookupValue = $isPhone ? $cleanedInput : $emailOrPhone;
+                
+                // Find customer by email OR phone
+                $customer = null;
+                
+                if ($isEmail) {
+                    // Try exact match first
+                    $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE email = ? LIMIT 1");
+                    $st->execute([$emailOrPhone]);
+                    $customer = $st->fetch(PDO::FETCH_ASSOC);
+                    
+                    // If not found, try case-insensitive match
+                    if (!$customer) {
+                        $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE LOWER(email) = LOWER(?) LIMIT 1");
+                        $st->execute([$emailOrPhone]);
+                        $customer = $st->fetch(PDO::FETCH_ASSOC);
+                    }
+                } else {
+                    // For phone: try exact match first
+                    $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE phone = ? LIMIT 1");
+                    $st->execute([$lookupValue]);
+                    $customer = $st->fetch(PDO::FETCH_ASSOC);
+                    
+                    // If not found, try TRIM match
+                    if (!$customer) {
+                        $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE TRIM(phone) = ? LIMIT 1");
+                        $st->execute([$lookupValue]);
+                        $customer = $st->fetch(PDO::FETCH_ASSOC);
+                    }
+                    
+                    // If still not found, try cleaned match (remove all non-digits from DB phone)
+                    if (!$customer) {
+                        $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = ? LIMIT 1");
+                        $st->execute([$lookupValue]);
+                        $customer = $st->fetch(PDO::FETCH_ASSOC);
+                    }
+                    
+                    // Final fallback: get all and check manually
+                    if (!$customer) {
+                        $allStmt = $pdo->prepare("SELECT id, name, firm, email, phone, address, status, password_hash FROM customers");
+                        $allStmt->execute();
+                        $allCustomers = $allStmt->fetchAll(PDO::FETCH_ASSOC);
+                        
+                        foreach ($allCustomers as $cust) {
+                            $dbPhone = preg_replace('/[\s\-\(\)]/', '', trim($cust['phone'] ?? ''));
+                            if ($dbPhone === $lookupValue) {
+                                $customer = $cust;
+                                break;
+                            }
+                        }
+                    }
+                }
                 
                 if (!$customer) {
-                    respond(['ok' => false, 'error' => 'Invalid email or password'], 401);
+                    // Provide more specific error message
+                    if ($isPhone) {
+                        respond(['ok' => false, 'error' => 'Phone number not found. Please check your phone number or register first.'], 401);
+                    } else {
+                        respond(['ok' => false, 'error' => 'Email not found. Please check your email or register first.'], 401);
+                    }
                 }
                 
                 // Check if account is active (status must be 'true', true, '1', or 1)
@@ -63,14 +135,23 @@ switch ($method) {
                 }
                 
                 // ✅ SECURITY: ALWAYS verify password if password_hash column exists
-                if (empty($customer['password_hash'])) {
+                if (empty($customer['password_hash']) || $customer['password_hash'] === null) {
                     // If password_hash is empty, reject login - user must set password first
                     respond(['ok' => false, 'error' => 'Password not set. Please contact admin or reset password.'], 401);
                 }
                 
                 // Verify password - this is MANDATORY
-                if (!password_verify($password, $customer['password_hash'])) {
-                    respond(['ok' => false, 'error' => 'Invalid email or password'], 401);
+                // Make sure password_hash is a string
+                $passwordHash = (string)$customer['password_hash'];
+                $passwordToVerify = (string)$password;
+                
+                if (!password_verify($passwordToVerify, $passwordHash)) {
+                    // Provide more specific error message
+                    if ($isPhone) {
+                        respond(['ok' => false, 'error' => 'Password is incorrect. Please check your password and try again.'], 401);
+                    } else {
+                        respond(['ok' => false, 'error' => 'Password is incorrect. Please check your password and try again.'], 401);
+                    }
                 }
                 
                 // Remove password_hash from response
@@ -78,13 +159,41 @@ switch ($method) {
                 
                 respond(['ok' => true, 'customer' => $customer]);
             } else {
-                // Fallback: if password column doesn't exist, just check email and status
-                $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status FROM customers WHERE email = ? LIMIT 1");
-                $st->execute([$email]);
+                // Fallback: if password column doesn't exist, just check email/phone and status
+                $cleanedInput = preg_replace('/[\s\-\(\)]/', '', $emailOrPhone);
+                $isEmail = filter_var($emailOrPhone, FILTER_VALIDATE_EMAIL);
+                $isPhone = preg_match('/^[0-9]{10}$/', $cleanedInput);
+                
+                if (!$isEmail && !$isPhone) {
+                    if (preg_match('/^[0-9]+$/', $cleanedInput)) {
+                        if (strlen($cleanedInput) < 10) {
+                            respond(['ok' => false, 'error' => 'Phone number must be 10 digits'], 400);
+                        } else if (strlen($cleanedInput) > 10) {
+                            respond(['ok' => false, 'error' => 'Phone number must be exactly 10 digits'], 400);
+                        }
+                    }
+                    respond(['ok' => false, 'error' => 'Please enter a valid email address or 10-digit phone number'], 400);
+                }
+                
+                $lookupValue = $isPhone ? $cleanedInput : $emailOrPhone;
+                
+                if ($isEmail) {
+                    $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status FROM customers WHERE email = ? LIMIT 1");
+                    $st->execute([$emailOrPhone]);
+                } else {
+                    // For phone: try exact match first, then try with cleaned phone
+                    $st = $pdo->prepare("SELECT id, name, firm, email, phone, address, status FROM customers WHERE phone = ? OR REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = ? LIMIT 1");
+                    $st->execute([$lookupValue, $lookupValue]);
+                }
                 $customer = $st->fetch(PDO::FETCH_ASSOC);
                 
                 if (!$customer) {
-                    respond(['ok' => false, 'error' => 'Invalid email or password'], 401);
+                    // Provide more specific error message
+                    if ($isPhone) {
+                        respond(['ok' => false, 'error' => 'Phone number not found'], 401);
+                    } else {
+                        respond(['ok' => false, 'error' => 'Email not found'], 401);
+                    }
                 }
                 
                 // Check if account is active (status must be 'true', true, '1', or 1)
@@ -147,6 +256,19 @@ switch ($method) {
             respond(['error' => 'Phone number is required'], 400);
         }
         
+        // Clean phone number: remove spaces, dashes, parentheses
+        $cleanedPhone = preg_replace('/[\s\-\(\)]/', '', trim($data['phone']));
+        if (!preg_match('/^[0-9]{10}$/', $cleanedPhone)) {
+            respond(['error' => 'Phone number must be exactly 10 digits'], 400);
+        }
+        
+        // Check if phone already exists
+        $checkPhone = $pdo->prepare("SELECT id FROM customers WHERE phone = ? OR REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', '') = ? LIMIT 1");
+        $checkPhone->execute([$cleanedPhone, $cleanedPhone]);
+        if ($checkPhone->fetch()) {
+            respond(['error' => 'Phone number already registered'], 409);
+        }
+        
         // Check if email already exists (only if email is provided)
         if (!empty($data['email'])) {
             $checkEmail = $pdo->prepare("SELECT id FROM customers WHERE email = ? AND email != '' LIMIT 1");
@@ -179,7 +301,7 @@ switch ($method) {
                 $data['firm'] ?? '',
                 $data['address'] ?? '',
                 $email,
-                $data['phone'] ?? '',
+                $cleanedPhone, // Store cleaned phone number
                 $passwordHash,
                 $status // New registrations are approved by default (status='true')
             ]);
@@ -191,7 +313,7 @@ switch ($method) {
                 $data['firm'] ?? '',
                 $data['address'] ?? '',
                 $email,
-                $data['phone'] ?? '',
+                $cleanedPhone, // Store cleaned phone number
                 $status // New registrations are approved by default (status='true')
             ]);
         }

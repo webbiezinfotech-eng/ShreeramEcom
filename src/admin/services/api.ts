@@ -2,9 +2,9 @@
 
 // ---------- ENV ----------
 // PRODUCTION SERVER
-// const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
+const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
 // LOCAL DEVELOPMENT - Use Mac IP for phone testing
-const API_BASE_URL: string = "http://192.168.1.6:8000/api";
+// const API_BASE_URL: string = "http://192.168.1.6:8000/api";
 // For Mac browser testing, you can also use: "http://localhost:8000/api"
 const API_KEY: string = "SHREERAMstore";
 

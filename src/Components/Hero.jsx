@@ -8,7 +8,10 @@ import { CiBadgeDollar } from "react-icons/ci";
 import WelcomePopup from "./WelcomePopup";
 
 // API Base URL for images (should match api.js)
-const API_BASE_URL = "http://192.168.1.6:8000";
+// PRODUCTION SERVER
+const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+// LOCAL DEVELOPMENT
+// const API_BASE_URL = "http://192.168.1.6:8000";
 
 function Hero() {
   const [categories, setCategories] = useState([]);

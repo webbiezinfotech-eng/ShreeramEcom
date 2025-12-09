@@ -56,11 +56,16 @@ function Checkout() {
           if (!productId) {
             // Skip items without product_id
           }
+          const quantity = parseInt(item.quantity || 1);
+          const itemsPerPack = parseInt(item.items_per_pack || 1);
+          const pricePerPiece = parseFloat(item.price || 0);
+          // Total quantity in pieces (boxes × items_per_pack)
+          const totalQuantity = quantity * itemsPerPack;
           return {
             product_id: productId,
             category_id: null, // Will be fetched from product if needed
-            quantity: parseInt(item.quantity || 1),
-            price: parseFloat(item.price || 0)
+            quantity: totalQuantity, // Send total pieces, not boxes
+            price: pricePerPiece // Price per piece
           };
         }).filter(item => item.product_id) // Filter out items without product_id
         };
@@ -89,7 +94,12 @@ function Checkout() {
   };
 
   const getSubtotal = () => {
-    return cartItems.reduce((total, item) => total + ((item.price || 0) * (item.quantity || 1)), 0);
+    return cartItems.reduce((total, item) => {
+      const price = parseFloat(item.price || 0);
+      const quantity = parseInt(item.quantity || 1);
+      const itemsPerPack = parseInt(item.items_per_pack || 1);
+      return total + (price * quantity * itemsPerPack);
+    }, 0);
   };
 
   if (cartLoading) {
@@ -164,12 +174,22 @@ function Checkout() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="text-sm sm:text-base font-medium text-gray-800 truncate">{item.name}</h3>
-                        <p className="text-xs sm:text-sm text-gray-600">Quantity: {item.quantity || 1}</p>
-                        <p className="text-xs sm:text-sm text-gray-600">Price: ₹{parseFloat(item.price || 0).toFixed(2)}</p>
+                        <p className="text-xs sm:text-sm text-gray-600">
+                          {item.items_per_pack && item.items_per_pack > 1 
+                            ? `Boxes: ${item.quantity || 1} (${(parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1))} pieces)`
+                            : `Quantity: ${item.quantity || 1}`
+                          }
+                        </p>
+                        <p className="text-xs sm:text-sm text-gray-600">
+                          {item.items_per_pack && item.items_per_pack > 1
+                            ? `Price: ₹${parseFloat(item.price || 0).toFixed(2)} per piece (₹${(parseFloat(item.price || 0) * parseInt(item.items_per_pack || 1)).toFixed(2)} per box)`
+                            : `Price: ₹${parseFloat(item.price || 0).toFixed(2)}`
+                          }
+                        </p>
                       </div>
                     </div>
                     <span className="text-base sm:text-lg font-semibold text-[#002D7A] w-full sm:w-auto text-right sm:text-left">
-                      ₹{((item.price || 0) * (item.quantity || 1)).toFixed(2)}
+                      ₹{((parseFloat(item.price || 0) * parseInt(item.quantity || 1) * parseInt(item.items_per_pack || 1))).toFixed(2)}
                     </span>
                   </div>
                 ))}

@@ -6,18 +6,18 @@
 
 // --- Database Credentials ---
 // PRODUCTION SERVER
-// const DB_HOST = '148.222.53.10';
-// const DB_PORT = 3306;
-// const DB_NAME = 'u723435472_shreeram_ecom';
-// const DB_USER = 'u723435472_shreeram_ecom';
-// const DB_PASS = 'shreeram@Store123';
-
-// LOCAL DEVELOPMENT (XAMPP - use 127.0.0.1 to force TCP/IP connection)
-const DB_HOST = '127.0.0.1';
+const DB_HOST = '148.222.53.10';
 const DB_PORT = 3306;
 const DB_NAME = 'u723435472_shreeram_ecom';
-const DB_USER = 'root';
-const DB_PASS = '';
+const DB_USER = 'u723435472_shreeram_ecom';
+const DB_PASS = 'shreeram@Store123';
+
+// LOCAL DEVELOPMENT (XAMPP - use 127.0.0.1 to force TCP/IP connection)
+// const DB_HOST = '127.0.0.1';
+// const DB_PORT = 3306;
+// const DB_NAME = 'u723435472_shreeram_ecom';
+// const DB_USER = 'root';
+// const DB_PASS = '';
 
 // --- CORS and Security ---
 // PRODUCTION SERVER

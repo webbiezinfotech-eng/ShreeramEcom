@@ -9,17 +9,9 @@ import LoginPrompt from "./LoginPrompt";
 export default function FeaturedProducts() {
   const [products, setProducts] = useState([]);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [quantities, setQuantities] = useState(() => {
-    // Restore quantities from localStorage
-    const saved = localStorage.getItem('featured_products_quantities');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [quantities, setQuantities] = useState({});
   const [addingToCart, setAddingToCart] = useState({}); // Track which product is being added
-  const [showQuantitySelector, setShowQuantitySelector] = useState(() => {
-    // Restore quantity selector visibility from localStorage
-    const saved = localStorage.getItem('featured_products_quantity_selectors');
-    return saved ? JSON.parse(saved) : {};
-  });
+  const [showQuantitySelector, setShowQuantitySelector] = useState({});
   
   // Debounce timer ref for input field
   const inputDebounceTimer = useRef({});
@@ -57,23 +49,27 @@ export default function FeaturedProducts() {
       return;
     }
 
-    // Calculate new quantity
-    const currentQty = quantities[productId] || 1;
-    const newQty = Math.max(1, currentQty + change);
+    // Calculate new quantity - get from cart item if exists, otherwise from state
+    const existingCartItem = getCartItem(productId);
+    const currentQty = existingCartItem ? existingCartItem.quantity : (quantities[productId] || 1);
+    const newQty = Math.max(0, currentQty + change); // Allow 0 to remove item
     
-    // Update local state
-    setQuantities(prev => {
-      const updated = { ...prev, [productId]: newQty };
-      localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
-      return updated;
-    });
+    // Update local state (don't save to localStorage - sync from cart instead)
+    setQuantities(prev => ({ ...prev, [productId]: newQty }));
     
-    // If item is in cart, update cart immediately
-    const cartItem = getCartItem(productId);
-    if (cartItem) {
-      const cartItemId = cartItem.cart_id || cartItem.id;
+    // If item is in cart, update cart immediately (quantity 0 will remove it)
+    if (existingCartItem) {
+      const cartItemId = existingCartItem.cart_id || existingCartItem.id;
       try {
         await updateItemQuantity(cartItemId, newQty);
+        // If quantity becomes 0, hide the selector
+        if (newQty === 0) {
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev };
+            delete updated[productId];
+            return updated;
+          });
+        }
       } catch (error) {
         console.error('Error updating cart quantity:', error);
       }
@@ -88,15 +84,12 @@ export default function FeaturedProducts() {
       return;
     }
 
-    const numValue = parseInt(value) || 1;
-    const validQty = Math.max(1, numValue);
+    // Allow empty string for typing, but treat invalid values as 0
+    const numValue = value === '' ? 0 : parseInt(value);
+    const validQty = isNaN(numValue) ? 0 : Math.max(0, numValue); // Allow 0 to remove item
     
-    // Update local state immediately
-    setQuantities(prev => {
-      const updated = { ...prev, [productId]: validQty };
-      localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
-      return updated;
-    });
+    // Update local state immediately (don't save to localStorage - sync from cart instead)
+    setQuantities(prev => ({ ...prev, [productId]: validQty }));
     
     // Clear previous timer
     if (inputDebounceTimer.current[productId]) {
@@ -105,12 +98,20 @@ export default function FeaturedProducts() {
     
     // Debounce cart update - wait 500ms after user stops typing
     inputDebounceTimer.current[productId] = setTimeout(async () => {
-      // If item is in cart, update cart
+      // If item is in cart, update cart (quantity 0 will remove it)
       const cartItem = getCartItem(productId);
       if (cartItem) {
         const cartItemId = cartItem.cart_id || cartItem.id;
         try {
           await updateItemQuantity(cartItemId, validQty);
+          // If quantity becomes 0, hide the selector
+          if (validQty === 0) {
+            setShowQuantitySelector(prev => {
+              const updated = { ...prev };
+              delete updated[productId];
+              return updated;
+            });
+          }
         } catch (error) {
           console.error('Error updating cart quantity:', error);
         }
@@ -148,18 +149,10 @@ export default function FeaturedProducts() {
     try {
       const result = await addItemToCart(productId, 1);
       if (result.success) {
-        // Set quantity to 1 for this product
-        setQuantities(prev => {
-          const updated = { ...prev, [productId]: 1 };
-          localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
-          return updated;
-        });
-        // Show quantity selector so user can add more if needed
-        setShowQuantitySelector(prev => {
-          const updated = { ...prev, [productId]: true };
-          localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
-          return updated;
-        });
+        // Set quantity to 1 for this product (don't save to localStorage)
+        setQuantities(prev => ({ ...prev, [productId]: 1 }));
+        // Show quantity selector so user can add more if needed (don't save to localStorage)
+        setShowQuantitySelector(prev => ({ ...prev, [productId]: true }));
       } else if (result.requiresLogin) {
         setShowLoginPrompt(true);
       }
@@ -194,24 +187,16 @@ export default function FeaturedProducts() {
         const result = await updateItemQuantity(cartItemId, quantity);
         if (result.success) {
           // Notification will be updated by CartContext
-          // Keep quantity selector visible
-          setShowQuantitySelector(prev => {
-            const updated = { ...prev, [product.id]: true };
-            localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
-            return updated;
-          });
+          // Keep quantity selector visible (don't save to localStorage)
+          setShowQuantitySelector(prev => ({ ...prev, [product.id]: true }));
         }
       } else {
         // Add new item to cart
         const result = await addItemToCart(product.id, quantity);
         if (result.success) {
           // Notification will be shown by CartContext
-          // Keep quantity selector visible
-          setShowQuantitySelector(prev => {
-            const updated = { ...prev, [product.id]: true };
-            localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
-            return updated;
-          });
+          // Keep quantity selector visible (don't save to localStorage)
+          setShowQuantitySelector(prev => ({ ...prev, [product.id]: true }));
         } else if (result.requiresLogin) {
           setShowLoginPrompt(true);
         }
@@ -401,13 +386,12 @@ export default function FeaturedProducts() {
                                 e.stopPropagation();
                               }}
                               className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
-                              disabled={(quantities[product.id] || 1) <= 1}
                             >
                               <FaMinus className="text-gray-500 text-sm sm:text-xs" />
                             </button>
                             <input
                               type="number"
-                              min="1"
+                              min="0"
                               value={quantities[product.id] || 1}
                               onChange={(e) => {
                                 e.preventDefault();

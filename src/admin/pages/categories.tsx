@@ -3,7 +3,10 @@ import { categoriesAPI, type Category } from "../services/api";
 import Alert from "../components/Alert";
 
 // API Base URL for images (should match api.ts)
-const API_BASE_URL = "http://192.168.1.6:8000";
+// PRODUCTION SERVER
+const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+// LOCAL DEVELOPMENT
+// const API_BASE_URL = "http://192.168.1.6:8000";
 
 const Categories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);

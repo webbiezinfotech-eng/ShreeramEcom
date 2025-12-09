@@ -51,10 +51,10 @@ function ProductDetail() {
           // Construct full image URL if needed
           let imageUrl = data.item.image;
           if (imageUrl && !imageUrl.startsWith('http')) {
-            // LOCAL DEVELOPMENT - Use Mac IP for phone testing
-            imageUrl = `http://192.168.1.6:8000/${imageUrl}`;
             // PRODUCTION SERVER
-            // imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+            imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+            // LOCAL DEVELOPMENT - Use Mac IP for phone testing
+            // imageUrl = `http://192.168.1.6:8000/${imageUrl}`;
             // For Mac browser testing, you can also use: `http://localhost:8000/${imageUrl}`
           }
           setProduct({ ...data.item, image: imageUrl });

@@ -72,11 +72,12 @@ function Register() {
       newErrors.address = "Please provide a complete address (at least 10 characters)";
     }
 
-    if (!formData.password) {
+    // Password validation removed - user can set any password they want
+    if (!formData.password || formData.password.trim() === '') {
       newErrors.password = "Password is required";
     }
 
-    if (!formData.confirmPassword) {
+    if (!formData.confirmPassword || formData.confirmPassword.trim() === '') {
       newErrors.confirmPassword = "Please confirm your password";
     } else if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords do not match";
@@ -104,6 +105,13 @@ function Register() {
         });
         
         if (result.ok && result.customer) {
+          // Clear ALL old cart and product-related localStorage for new user
+          localStorage.removeItem('show_cart_notification');
+          localStorage.removeItem('featured_products_quantities');
+          localStorage.removeItem('featured_products_quantity_selectors');
+          localStorage.removeItem('products_page_quantities');
+          localStorage.removeItem('products_page_quantity_selectors');
+          
           // Trigger storage event to sync cart context
           window.dispatchEvent(new StorageEvent('storage', {
             key: 'customer_id',

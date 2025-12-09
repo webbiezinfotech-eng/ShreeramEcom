@@ -99,10 +99,10 @@ try {
         $imageUrl = $row['image'];
         // Check if URL starts with http (PHP 7.x compatible)
         if (strpos($imageUrl, 'http') !== 0) {
-          // LOCAL DEVELOPMENT - Use Mac IP for phone testing
-          $imageUrl = 'http://192.168.1.6:8000/' . ltrim($imageUrl, '/');
           // PRODUCTION SERVER
-          // $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
+          $imageUrl = 'https://shreeram.webbiezinfotech.in/' . ltrim($imageUrl, '/');
+          // LOCAL DEVELOPMENT - Use Mac IP for phone testing
+          // $imageUrl = 'http://192.168.1.6:8000/' . ltrim($imageUrl, '/');
           // For Mac browser testing, you can also use: 'http://localhost:8000/' . ltrim($imageUrl, '/')
         }
       }
