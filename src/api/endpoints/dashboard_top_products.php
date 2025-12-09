@@ -1,15 +1,8 @@
 <?php
 // api-folder/endpoints/dashboard_top_products.php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *'); // dev only
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
-header('Access-Control-Allow-Methods: GET, OPTIONS');
-
-require_once __DIR__ . '/../config.php';
+// CORS headers will be set by common.php, so don't set them here to avoid conflicts
 require_once __DIR__ . '/../common.php';
 require_once __DIR__ . '/../db.php';
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(204); exit; }
 require_api_key();
 
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 5;

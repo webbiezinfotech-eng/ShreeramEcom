@@ -47,10 +47,12 @@ const ProductList: React.FC = () => {
     type: 'success' | 'error' | 'warning' | 'info';
     message: string;
     isVisible: boolean;
+    duration?: number;
   }>({
     type: 'success',
     message: '',
-    isVisible: false
+    isVisible: false,
+    duration: 3000
   });
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -60,9 +62,9 @@ const ProductList: React.FC = () => {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   
-  // Show alert function
-  const showAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
-    setAlert({ type, message, isVisible: true });
+  // Show alert function with optional duration
+  const showAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string, duration?: number) => {
+    setAlert({ type, message, isVisible: true, duration: duration || 3000 });
   };
 
   const hideAlert = () => {
@@ -237,8 +239,8 @@ const ProductList: React.FC = () => {
 
       // Process rows (skip header)
       const productsToImport = [];
-      const seenProductNames = new Set<string>(); // Track duplicates in this batch by name
-      const seenSkus = new Set<string>(); // Track duplicates in this batch by SKU
+      const seenProductNames = new Set<string>(); // Track duplicates in this batch by name only
+      let skippedDuplicatesCount = 0; // Track skipped duplicates
       
       for (let i = 1; i < jsonData.length; i++) {
         const row = jsonData[i];
@@ -250,20 +252,11 @@ const ProductList: React.FC = () => {
         // Check for duplicate product name in this batch (case-insensitive)
         const nameLower = name.toLowerCase();
         if (seenProductNames.has(nameLower)) {
+          skippedDuplicatesCount++;
           console.warn(`Row ${i + 1}: Skipping duplicate product name "${name}" in Excel file`);
           continue; // Skip duplicate in same file
         }
         seenProductNames.add(nameLower);
-
-        // Check for duplicate SKU in this batch
-        const sku = skuIdx >= 0 ? String(row[skuIdx] || "").trim() : "";
-        if (sku && seenSkus.has(sku)) {
-          console.warn(`Row ${i + 1}: Skipping duplicate SKU "${sku}" in Excel file`);
-          continue; // Skip duplicate SKU in same file
-        }
-        if (sku) {
-          seenSkus.add(sku);
-        }
 
         // Find category by name (case-insensitive matching)
         let categoryId = null;
@@ -314,6 +307,8 @@ const ProductList: React.FC = () => {
         const result = await productsAPI.bulkImport(productsToImport);
         successCount = Number(result?.imported || 0);
         totalCount = Number(result?.total || productsToImport.length);
+        const backendSkipped = Number(result?.skipped_duplicates || 0);
+        skippedDuplicatesCount += backendSkipped; // Add backend skipped to frontend skipped
         resultErrors = Array.isArray(result?.errors) ? result.errors.filter(Boolean) : [];
       } catch (bulkError: any) {
         console.warn('Bulk import endpoint failed, falling back to single create calls.', bulkError);
@@ -342,16 +337,30 @@ const ProductList: React.FC = () => {
       // Refresh products list
       await fetchProducts();
 
-      // Show final result
+      // Show final result with skipped duplicates count
+      // If duplicates were skipped, show alert for minimum 10 seconds
+      const alertDuration = skippedDuplicatesCount > 0 ? 10000 : 3000;
+      
       if (successCount > 0) {
         const failedCount = Math.max(totalCount - successCount, resultErrors.length);
-        const message = failedCount > 0
-          ? `✅ Imported ${successCount}/${totalCount} products. ${failedCount} failed.`
-          : `✅ Successfully imported ${successCount} products!`;
-        showAlert('success', message);
+        let message = `✅ Successfully imported ${successCount} product(s)!`;
+        
+        if (skippedDuplicatesCount > 0) {
+          message += `\n⚠️ ${skippedDuplicatesCount} duplicate product(s) skipped.`;
+        }
+        
+        if (failedCount > 0) {
+          message += `\n❌ ${failedCount} product(s) failed to import.`;
+        }
+        
+        showAlert('success', message, alertDuration);
       } else {
         const errorPreview = resultErrors.slice(0, 3).join('; ') || 'Unknown error';
-        showAlert('error', `❌ Failed to import products. ${errorPreview}`);
+        let errorMessage = `❌ Failed to import products. ${errorPreview}`;
+        if (skippedDuplicatesCount > 0) {
+          errorMessage += `\n⚠️ ${skippedDuplicatesCount} duplicate product(s) were skipped.`;
+        }
+        showAlert('error', errorMessage, alertDuration);
       }
       
 
@@ -455,7 +464,7 @@ const ProductList: React.FC = () => {
         message={alert.message}
         isVisible={alert.isVisible}
         onClose={hideAlert}
-        duration={4000}
+        duration={alert.duration || 3000}
       />
       {/* Header */}
       <div className="mb-8">

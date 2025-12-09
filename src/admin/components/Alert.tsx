@@ -71,7 +71,7 @@ const Alert: React.FC<AlertProps> = ({
             <span className="text-xl">{styles.icon}</span>
           </div>
           <div className="ml-3 flex-1">
-            <p className="text-sm font-medium">{message}</p>
+            <div className="text-sm font-medium whitespace-pre-line">{message}</div>
           </div>
           <div className="ml-4 flex-shrink-0">
             <button

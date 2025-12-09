@@ -138,15 +138,22 @@ switch ($method) {
     // ✅ Add New Customer / Register
     case 'POST':
         $data = json_decode(file_get_contents("php://input"), true);
-        if (!$data || !isset($data['name'], $data['email'])) {
-            respond(['error' => 'Name & Email required'], 400);
+        if (!$data || !isset($data['name'])) {
+            respond(['error' => 'Name is required'], 400);
         }
         
-        // Check if email already exists
-        $checkEmail = $pdo->prepare("SELECT id FROM customers WHERE email = ? LIMIT 1");
-        $checkEmail->execute([$data['email']]);
-        if ($checkEmail->fetch()) {
-            respond(['error' => 'Email already registered'], 409);
+        // Phone is required
+        if (empty($data['phone'])) {
+            respond(['error' => 'Phone number is required'], 400);
+        }
+        
+        // Check if email already exists (only if email is provided)
+        if (!empty($data['email'])) {
+            $checkEmail = $pdo->prepare("SELECT id FROM customers WHERE email = ? AND email != '' LIMIT 1");
+            $checkEmail->execute([$data['email']]);
+            if ($checkEmail->fetch()) {
+                respond(['error' => 'Email already registered'], 409);
+            }
         }
         
         $hasPasswordCol = hasPasswordColumn($pdo);
@@ -161,6 +168,9 @@ switch ($method) {
         // Admin can still reject them later if needed
         $status = isset($data['status']) ? $data['status'] : 'true';
         
+        // Email is optional - use NULL if empty
+        $email = !empty($data['email']) ? $data['email'] : null;
+        
         if ($hasPasswordCol) {
             $st = $pdo->prepare("INSERT INTO customers (name, firm, address, email, phone, password_hash, status, created_at)
                                  VALUES (?, ?, ?, ?, ?, ?, ?, NOW())");
@@ -168,7 +178,7 @@ switch ($method) {
                 $data['name'] ?? '',
                 $data['firm'] ?? '',
                 $data['address'] ?? '',
-                $data['email'] ?? '',
+                $email,
                 $data['phone'] ?? '',
                 $passwordHash,
                 $status // New registrations are approved by default (status='true')
@@ -180,7 +190,7 @@ switch ($method) {
                 $data['name'] ?? '',
                 $data['firm'] ?? '',
                 $data['address'] ?? '',
-                $data['email'] ?? '',
+                $email,
                 $data['phone'] ?? '',
                 $status // New registrations are approved by default (status='true')
             ]);

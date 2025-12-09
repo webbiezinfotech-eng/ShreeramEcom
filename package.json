@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:api\"",
     "dev:frontend": "vite",
-    "dev:api": "php -S localhost:8000 -t src/api src/api/index.php",
+    "dev:api": "php -S 0.0.0.0:8000 -t src/api src/api/index.php",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

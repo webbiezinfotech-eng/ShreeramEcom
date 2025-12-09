@@ -178,3 +178,25 @@ body{
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+/* Mobile Touch Improvements */
+@media (max-width: 640px) {
+  /* Ensure touch targets are at least 44x44px for better mobile usability */
+  button, a, input[type="button"], input[type="submit"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Prevent text selection on buttons for better touch experience */
+  button {
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+    -webkit-touch-callout: none;
+    user-select: none;
+  }
+  
+  /* Improve touch manipulation */
+  .touch-manipulation {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+}

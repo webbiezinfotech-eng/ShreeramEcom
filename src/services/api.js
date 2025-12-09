@@ -1,7 +1,8 @@
 // PRODUCTION SERVER
-export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
-// LOCAL DEVELOPMENT
-// export const API_BASE = "http://localhost:8000/api";
+// export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
+// LOCAL DEVELOPMENT - Use Mac IP for phone testing
+export const API_BASE = "http://192.168.1.6:8000/api";
+// For Mac browser testing, you can also use: "http://localhost:8000/api"
 
 // ✅ Get products
 export async function getProducts(limit = null, page = 1, search = '') {
@@ -10,7 +11,14 @@ export async function getProducts(limit = null, page = 1, search = '') {
     if (limit) url += `&limit=${limit}`;
     if (search) url += `&q=${encodeURIComponent(search)}`;
     
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     if (!res.ok) throw new Error("Failed to fetch products");
     const data = await res.json();
     
@@ -58,7 +66,14 @@ export async function getProductsByCategory(categoryId, limit = null) {
     let url = `${API_BASE}/endpoints/products.php?api_key=SHREERAMstore`;
     if (limit) url += `&limit=${limit}`;
     
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     if (!res.ok) throw new Error("Failed to fetch products");
     const data = await res.json();
     

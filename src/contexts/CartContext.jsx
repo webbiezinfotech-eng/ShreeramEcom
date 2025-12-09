@@ -3,9 +3,10 @@ import { getCartItems, addToCart, updateCartItem, clearCart, getSessionId } from
 
 // API Base URL for image construction (should match api.js)
 // PRODUCTION SERVER
-const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
-// LOCAL DEVELOPMENT
-// const API_BASE_URL = "http://localhost:8000";
+// const API_BASE_URL = "https://shreeram.webbiezinfotech.in";
+// LOCAL DEVELOPMENT - Use Mac IP for phone testing
+const API_BASE_URL = "http://192.168.1.6:8000";
+// For Mac browser testing, you can also use: "http://localhost:8000"
 
 const CartContext = createContext();
 
@@ -241,9 +242,12 @@ export const CartProvider = ({ children }) => {
       
       const response = await updateCartItem(itemId, quantity, currentCustomerId, currentSessionId);
       if (response.ok) {
-        // If item was removed (quantity 0), reload to ensure sync
-        if (quantity === 0) {
-          await loadCartItems();
+        // Reload cart items to ensure sync and update notification
+        await loadCartItems();
+        // Show/update cart notification when quantity changes
+        if (quantity > 0) {
+          setShowCartNotification(true);
+          localStorage.setItem('show_cart_notification', 'true');
         }
         return { success: true };
       } else {

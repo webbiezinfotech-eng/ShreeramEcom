@@ -2,6 +2,9 @@ import React, { useState, useEffect } from "react";
 import { categoriesAPI, type Category } from "../services/api";
 import Alert from "../components/Alert";
 
+// API Base URL for images (should match api.ts)
+const API_BASE_URL = "http://192.168.1.6:8000";
+
 const Categories: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,12 +21,13 @@ const Categories: React.FC = () => {
     isVisible: false
   });
 
-  // Modal states
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
+  // Modal states - Single modal for Add/Edit
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
-  const [form, setForm] = useState<{ name: string; slug: string }>({ name: "", slug: "" });
+  const [form, setForm] = useState<{ name: string; slug: string; image: File | null }>({ name: "", slug: "", image: null });
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   // Show alert function
   const showAlert = (type: 'success' | 'error' | 'warning' | 'info', message: string): void => {
@@ -46,6 +50,7 @@ const Categories: React.FC = () => {
         name: String(c.name || ""),
         slug: String(c.slug || ""),
         parent_id: c.parent_id != null ? Number(c.parent_id) : null,
+        image: c.image || null,
       })));
     } catch (e: any) {
       setError(e?.message || "Failed to load categories");
@@ -69,43 +74,77 @@ const Categories: React.FC = () => {
       .trim();
   };
 
-  // Handle Add
-  const handleAdd = async () => {
+  // Handle Save (works for both Add and Edit)
+  const handleSave = async () => {
     if (!form.name.trim()) {
       showAlert('error', 'Category name is required!');
       return;
     }
 
-    try {
-      const slug = form.slug.trim() || generateSlug(form.name);
-      await categoriesAPI.create({ name: form.name.trim(), slug });
-      setIsAddOpen(false);
-      setForm({ name: "", slug: "" });
-      fetchCategories();
-      showAlert('success', '✅ Category added successfully!');
-    } catch (error: any) {
-      showAlert('error', error?.message || '❌ Failed to add category');
-    }
-  };
-
-  // Handle Edit
-  const handleEdit = async () => {
-    if (!selectedCategory || !form.name.trim()) {
-      showAlert('error', 'Category name is required!');
+    if (modalMode === 'edit' && !selectedCategory) {
+      showAlert('error', 'Category not selected!');
       return;
     }
 
     try {
       const slug = form.slug.trim() || generateSlug(form.name);
-      await categoriesAPI.update(selectedCategory.id, { name: form.name.trim(), slug });
-      setIsEditOpen(false);
-      setForm({ name: "", slug: "" });
+      
+      if (form.image) {
+        // Use FormData for image upload
+        const formData = new FormData();
+        formData.append('name', form.name.trim());
+        formData.append('slug', slug);
+        formData.append('image', form.image);
+        
+        if (modalMode === 'edit' && selectedCategory) {
+          await categoriesAPI.update(selectedCategory.id, formData);
+        } else {
+          await categoriesAPI.create(formData);
+        }
+      } else {
+        // Use JSON for text-only
+        if (modalMode === 'edit' && selectedCategory) {
+          await categoriesAPI.update(selectedCategory.id, { name: form.name.trim(), slug });
+        } else {
+          await categoriesAPI.create({ name: form.name.trim(), slug });
+        }
+      }
+      
+      setIsModalOpen(false);
+      setForm({ name: "", slug: "", image: null });
+      setPreviewImage(null);
       setSelectedCategory(null);
       fetchCategories();
-      showAlert('success', '✅ Category updated successfully!');
+      showAlert('success', modalMode === 'edit' ? '✅ Category updated successfully!' : '✅ Category added successfully!');
     } catch (error: any) {
-      showAlert('error', error?.message || '❌ Failed to update category');
+      showAlert('error', error?.message || `❌ Failed to ${modalMode === 'edit' ? 'update' : 'add'} category`);
     }
+  };
+
+  // Open modal for Add
+  const openAddModal = () => {
+    setModalMode('add');
+    setSelectedCategory(null);
+    setForm({ name: "", slug: "", image: null });
+    setPreviewImage(null);
+    setIsModalOpen(true);
+  };
+
+  // Open modal for Edit
+  const openEditModal = (cat: Category) => {
+    setModalMode('edit');
+    setSelectedCategory(cat);
+    setForm({ name: cat.name, slug: cat.slug || "", image: null });
+    setPreviewImage(null); // Reset preview, current image will be shown from selectedCategory
+    setIsModalOpen(true);
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setForm({ name: "", slug: "", image: null });
+    setPreviewImage(null);
+    setSelectedCategory(null);
   };
 
   // Handle Delete
@@ -143,10 +182,7 @@ const Categories: React.FC = () => {
       {/* Action Button */}
       <div className="mb-6">
         <button
-          onClick={() => {
-            setForm({ name: "", slug: "" });
-            setIsAddOpen(true);
-          }}
+          onClick={openAddModal}
           className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
         >
           + Add New Category
@@ -174,16 +210,26 @@ const Categories: React.FC = () => {
                 {categories.map((cat, index) => (
                   <tr key={cat.id} className="border-b hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                    <td className="px-4 py-3 text-gray-800 font-medium">{cat.name}</td>
+                    <td className="px-4 py-3 text-gray-800 font-medium">
+                      <div className="flex items-center gap-3">
+                        {cat.image && (
+                          <img 
+                            src={`${API_BASE_URL}/api/uploads/${cat.image}`} 
+                            alt={cat.name}
+                            className="w-10 h-10 object-cover rounded"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        )}
+                        <span>{cat.name}</span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{cat.slug || "-"}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button
-                          onClick={() => {
-                            setSelectedCategory(cat);
-                            setForm({ name: cat.name, slug: cat.slug || "" });
-                            setIsEditOpen(true);
-                          }}
+                          onClick={() => openEditModal(cat)}
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                           title="Edit Category"
                         >
@@ -220,14 +266,16 @@ const Categories: React.FC = () => {
         )}
       </div>
 
-      {/* Add Modal */}
-      {isAddOpen && (
+      {/* Single Modal for Add/Edit */}
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add New Category</h3>
+              <h3 className="text-lg font-semibold">
+                {modalMode === 'edit' ? 'Edit Category' : 'Add New Category'}
+              </h3>
               <button
-                onClick={() => setIsAddOpen(false)}
+                onClick={closeModal}
                 className="text-gray-500 hover:text-gray-700 text-xl"
               >
                 ✖
@@ -256,74 +304,78 @@ const Categories: React.FC = () => {
                 />
                 <p className="text-xs text-gray-500 mt-1">Leave empty to auto-generate</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Category Image (optional)</label>
+                
+                {/* Show current image in edit mode */}
+                {modalMode === 'edit' && selectedCategory?.image && !form.image && (
+                  <div className="mb-3 p-2 bg-gray-50 rounded border">
+                    <p className="text-xs text-gray-600 mb-2">Current image:</p>
+                    <img 
+                      src={`${API_BASE_URL}/api/uploads/${selectedCategory.image}`} 
+                      alt="Current" 
+                      className="w-32 h-32 object-cover rounded border-2 border-gray-300"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  </div>
+                )}
+                
+                {/* Show preview for newly selected image */}
+                {form.image && (
+                  <div className="mb-3 p-2 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-xs text-blue-700 mb-2 font-medium">
+                      {modalMode === 'edit' ? 'New image preview:' : 'Image preview:'}
+                    </p>
+                    <img 
+                      src={previewImage || ''} 
+                      alt="Preview" 
+                      className="w-32 h-32 object-cover rounded border-2 border-blue-300"
+                    />
+                  </div>
+                )}
+                
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  key={modalMode === 'edit' ? `edit-${selectedCategory?.id}` : 'add'}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null;
+                    setForm({ ...form, image: file });
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setPreviewImage(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    } else {
+                      // File removed - clear preview
+                      setPreviewImage(null);
+                    }
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {modalMode === 'edit' 
+                    ? 'JPG, PNG, or WebP (max 5MB). Select a new image to replace current image.'
+                    : 'JPG, PNG, or WebP (max 5MB)'
+                  }
+                </p>
+              </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button
-                onClick={() => setIsAddOpen(false)}
+                onClick={closeModal}
                 className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleAdd}
+                onClick={handleSave}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
               >
-                Add Category
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Modal */}
-      {isEditOpen && selectedCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white w-full max-w-md rounded-xl shadow-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Edit Category</h3>
-              <button
-                onClick={() => setIsEditOpen(false)}
-                className="text-gray-500 hover:text-gray-700 text-xl"
-              >
-                ✖
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category Name *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter category name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Slug (optional)</label>
-                <input
-                  type="text"
-                  value={form.slug}
-                  onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Auto-generated from name"
-                />
-                <p className="text-xs text-gray-500 mt-1">Leave empty to auto-generate</p>
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setIsEditOpen(false)}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEdit}
-                className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Update Category
+                {modalMode === 'edit' ? 'Update Category' : 'Add Category'}
               </button>
             </div>
           </div>

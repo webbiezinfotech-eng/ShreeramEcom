@@ -2,9 +2,10 @@
 
 // ---------- ENV ----------
 // PRODUCTION SERVER
-const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
-// LOCAL DEVELOPMENT
-// const API_BASE_URL: string = "http://localhost:8000/api";
+// const API_BASE_URL: string = "https://shreeram.webbiezinfotech.in/api";
+// LOCAL DEVELOPMENT - Use Mac IP for phone testing
+const API_BASE_URL: string = "http://192.168.1.6:8000/api";
+// For Mac browser testing, you can also use: "http://localhost:8000/api"
 const API_KEY: string = "SHREERAMstore";
 
 // ---------- Low-level fetch helper ----------
@@ -25,8 +26,12 @@ export async function apiCall(endpoint: string, options: RequestInit = {}) {
         // multipart ke case me Content-Type browser set karega; isliye skip
         ...(isFormData ? {} : { "Content-Type": "application/json" }),
         "X-API-Key": API_KEY,
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
         ...(options.headers || {}),
       },
+      cache: 'no-store',
     });
   } catch (fetchError: any) {
     // Network error - server not reachable
@@ -126,6 +131,7 @@ export type Category = {
   parent_id: number | null;
   name: string;
   slug?: string;
+  image?: string | null;
 };
 
 export type RecentCustomer = {
@@ -289,10 +295,27 @@ export const ordersAPI = {
 export const categoriesAPI = {
   getAll: () => apiCall("endpoints/categories.php"),
   getById: (id: number) => apiCall(`endpoints/categories.php?id=${id}`),
-  create: (data: any) =>
-    apiCall("endpoints/categories.php", { method: "POST", body: JSON.stringify(data) }),
-  update: (id: number, data: any) =>
-    apiCall(`endpoints/categories.php?id=${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  create: (data: any) => {
+    const isFormData = data instanceof FormData;
+    return apiCall("endpoints/categories.php", {
+      method: "POST",
+      body: isFormData ? data : JSON.stringify(data),
+    });
+  },
+  update: (id: number, data: any) => {
+    const isFormData = data instanceof FormData;
+    if (isFormData) {
+      data.append('_method', 'PUT');
+      return apiCall(`endpoints/categories.php?id=${id}`, {
+        method: "POST",
+        body: data,
+      });
+    }
+    return apiCall(`endpoints/categories.php?id=${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
   delete: (id: number) =>
     apiCall(`endpoints/categories.php?id=${id}`, { method: "DELETE" }),
 };

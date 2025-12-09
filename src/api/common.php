@@ -4,10 +4,36 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 
 // CORS Headers - Set these first before any output
-header('Access-Control-Allow-Origin: *');
+// Get the origin from the request
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '*';
+
+// List of allowed origins for local development
+$allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:3000',
+    'http://localhost:5175',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:3000',
+    'http://192.168.1.6:5173',
+    'http://192.168.1.6:5174',
+    'http://192.168.1.6:3000',
+    'https://shreeram.webbiezinfotech.in',
+    'http://shreeram.webbiezinfotech.in'
+];
+
+// Set allowed origin
+if (in_array($origin, $allowedOrigins)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+} else {
+    header('Access-Control-Allow-Origin: *');
+}
+
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Api-Key, x-api-key, Origin, Accept');
-header('Access-Control-Allow-Credentials: true');
+header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Api-Key, x-api-key, Origin, Accept, Cache-Control, Pragma, Expires');
+header('Access-Control-Allow-Credentials: false');
+header('Access-Control-Max-Age: 86400');
 header('Content-Type: application/json; charset=utf-8');
 
 // Handle preflight OPTIONS request

@@ -100,7 +100,9 @@ try {
                 FROM cart c
                 LEFT JOIN products p ON p.id = c.product_id
                 LEFT JOIN categories cat ON cat.id = p.category_id
-                WHERE c.session_id = ?
+                WHERE c.session_id = ? 
+                  AND c.quantity > 0
+                  AND (p.id IS NOT NULL AND p.status != 'inactive')
                 ORDER BY c.created_at DESC
             ");
             $stmt->execute([$session_db_id]);
@@ -200,9 +202,19 @@ try {
         $session_db_id = $session_data['id'];
         
         if ($quantity === 0) {
-            // Remove item
+            // Permanently remove item from cart - delete from database
+            // First get the product_id before deleting
+            $stmt = $pdo->prepare("SELECT product_id FROM cart WHERE id = ? AND session_id = ? LIMIT 1");
+            $stmt->execute([$item_id, $session_db_id]);
+            $itemToDelete = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Delete the specific cart item
             $stmt = $pdo->prepare("DELETE FROM cart WHERE id = ? AND session_id = ?");
             $stmt->execute([$item_id, $session_db_id]);
+            
+            // Also delete any other cart entries with quantity 0 for this session (cleanup)
+            $stmt = $pdo->prepare("DELETE FROM cart WHERE session_id = ? AND quantity <= 0");
+            $stmt->execute([$session_db_id]);
         } else {
             // Update quantity
             $stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND session_id = ?");

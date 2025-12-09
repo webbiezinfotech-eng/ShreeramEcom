@@ -1,15 +1,6 @@
 <?php
 // api-folder/endpoints/products.php
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *'); // dev only
-header('Access-Control-Allow-Headers: Content-Type, X-API-Key, X-HTTP-Method-Override');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(204);
-    exit;
-}
-
+// CORS headers will be set by common.php, so don't set them here to avoid conflicts
 require_once __DIR__ . '/../common.php';
 require_once __DIR__ . '/../db.php';
 require_api_key();
@@ -168,6 +159,7 @@ try {
             $products = $body['products'];
             $imported = 0;
             $errors = [];
+            $skippedDuplicates = 0; // Track skipped duplicates
 
             foreach ($products as $index => $productData) {
                 try {
@@ -177,26 +169,17 @@ try {
                         continue;
                     }
 
-                    // Check for duplicate product
-                    // First check by SKU if provided (SKU must be unique)
-                    $sku = isset($productData['sku']) ? trim($productData['sku']) : '';
-                    if (!empty($sku)) {
-                        $checkSku = $pdo->prepare("SELECT id, name FROM products WHERE TRIM(sku) = TRIM(:sku) LIMIT 1");
-                        $checkSku->execute([':sku' => $sku]);
-                        $skuRow = $checkSku->fetch(PDO::FETCH_ASSOC);
-                        if ($skuRow) {
-                            $errors[] = "Row " . ($index + 1) . ": SKU '$sku' already exists for product '" . $skuRow['name'] . "' (duplicate SKU)";
-                            continue;
-                        }
-                    }
-                    
-                    // Then check by name (case-insensitive name matching)
+                    // Check for duplicate product by name only (case-insensitive)
                     $checkProduct = $pdo->prepare("SELECT id FROM products WHERE LOWER(TRIM(name)) = LOWER(TRIM(:name)) LIMIT 1");
                     $checkProduct->execute([':name' => $name]);
                     if ($checkProduct->fetch()) {
-                        $errors[] = "Row " . ($index + 1) . ": Product '$name' already exists (duplicate name)";
+                        // Skip duplicate - track count but don't add to errors
+                        $skippedDuplicates++;
                         continue;
                     }
+                    
+                    // Extract SKU (no duplicate check for SKU)
+                    $sku = isset($productData['sku']) ? trim($productData['sku']) : '';
 
                     // Handle category - check if category_id is provided or category_name
                     $category_id = null;
@@ -255,6 +238,7 @@ try {
                 'ok' => true,
                 'imported' => $imported,
                 'total' => count($products),
+                'skipped_duplicates' => $skippedDuplicates,
                 'errors' => $errors
             ], JSON_UNESCAPED_UNICODE);
             exit;

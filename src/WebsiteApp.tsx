@@ -18,12 +18,24 @@ import CategoryPage from "./Components/CategoryPage.jsx";
 import ProductDetail from "./Components/ProductDetail.jsx";
 import ScrollToTop from "./Components/ScrollToTop.jsx";
 import CartNotification from "./Components/CartNotification.jsx";
+import { FaWhatsapp } from "react-icons/fa";
 
 function WebsiteApp() {
   return (
     <div className="">
       <ScrollToTop />
       <CartNotification />
+      
+      {/* Global WhatsApp Floating Button */}
+      <a
+        href="https://wa.me/message/7KXWXN7NXFVOE1"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 bg-green-500 p-2.5 sm:p-3 rounded-full shadow-lg text-white hover:bg-green-600 transition-colors z-[9998]"
+        aria-label="Contact us on WhatsApp"
+      >
+        <FaWhatsapp size={20} className="sm:w-6 sm:h-6" />
+      </a>
       <Routes>
         <Route path="/" element={
           <>

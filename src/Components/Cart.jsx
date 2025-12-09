@@ -9,7 +9,6 @@ function Cart() {
     loading, 
     updateItemQuantity, 
     removeItemFromCart, 
-    getCartTotal,
     loadCartItems 
   } = useCart();
   

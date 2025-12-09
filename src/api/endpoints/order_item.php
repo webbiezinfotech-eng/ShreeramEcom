@@ -1,27 +1,24 @@
 <?php
 // order_items.php — Manage order items (create + fetch)
-require_once '../cors.php';
-require_once '../db.php';
+require_once __DIR__ . '/../common.php';
+require_once __DIR__ . '/../db.php';
+require_api_key();
 
-header('Content-Type: application/json');
-
-function respond($data) {
-    echo json_encode($data);
-    exit;
-}
+$pdo = db();
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 // 🔹 POST: Create order items (when an order is placed)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
+if ($method === 'POST') {
+    $input = body_json();
 
     $order_id   = intval($input['order_id'] ?? 0);
     $items      = $input['items'] ?? []; // [{product_id, category_id, quantity, price}]
 
     if ($order_id <= 0 || empty($items)) {
-        respond(["status" => false, "message" => "Missing order_id or items"]);
+        json_out(["status" => false, "message" => "Missing order_id or items"], 422);
     }
 
-    $insertQuery = $conn->prepare("
+    $stmt = $pdo->prepare("
         INSERT INTO order_items (order_id, product_id, category_id, quantity, price)
         VALUES (?, ?, ?, ?, ?)
     ");
@@ -29,33 +26,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $successCount = 0;
     foreach ($items as $it) {
         $product_id  = intval($it['product_id'] ?? 0);
-        $category_id = intval($it['category_id'] ?? null);
+        $category_id = isset($it['category_id']) ? intval($it['category_id']) : null;
         $quantity    = intval($it['quantity'] ?? 1);
         $price       = floatval($it['price'] ?? 0);
 
         if ($product_id > 0) {
-            $insertQuery->bind_param("iiiid", $order_id, $product_id, $category_id, $quantity, $price);
-            if ($insertQuery->execute()) {
+            if ($stmt->execute([$order_id, $product_id, $category_id, $quantity, $price])) {
                 $successCount++;
             }
         }
     }
-    $insertQuery->close();
 
-    respond([
+    json_out([
         "status" => true,
         "message" => "Order items added successfully",
         "items_added" => $successCount
-    ]);
+    ], 201);
 }
 
-
 // 🔹 GET: Fetch items for a specific order
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+if ($method === 'GET') {
     $order_id = intval($_GET['order_id'] ?? 0);
 
     if ($order_id <= 0) {
-        respond(["status" => false, "message" => "Missing order_id"]);
+        json_out(["status" => false, "message" => "Missing order_id"], 422);
     }
 
     $sql = "
@@ -77,18 +71,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         WHERE oi.order_id = ?
     ";
 
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $order_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([$order_id]);
+    $items = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    $items = [];
-    while ($row = $result->fetch_assoc()) {
-        $items[] = $row;
-    }
-    $stmt->close();
-
-    respond([
+    json_out([
         "status" => true,
         "order_id" => $order_id,
         "total_items" => count($items),
@@ -96,5 +83,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     ]);
 }
 
-respond(["status" => false, "message" => "Invalid request method"]);
+json_out(["status" => false, "message" => "Invalid request method"], 405);
 ?>

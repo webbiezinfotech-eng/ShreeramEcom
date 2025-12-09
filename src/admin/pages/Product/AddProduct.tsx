@@ -58,7 +58,8 @@ const AddProduct: React.FC = () => {
   
   // Category management states
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [categoryForm, setCategoryForm] = useState({ name: "", slug: "" });
+  const [categoryForm, setCategoryForm] = useState({ name: "", slug: "", image: null as File | null });
+  const [categoryImagePreview, setCategoryImagePreview] = useState<string | null>(null);
   const [categoryLoading, setCategoryLoading] = useState(false);
   
   // Show alert function
@@ -108,6 +109,20 @@ const AddProduct: React.FC = () => {
     setCategoryForm(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleCategoryImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setCategoryForm(prev => ({ ...prev, image: file }));
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCategoryImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setCategoryImagePreview(null);
+    }
+  };
+
   const generateSlug = (name: string) => {
     return name
       .toLowerCase()
@@ -126,10 +141,22 @@ const AddProduct: React.FC = () => {
     
     try {
       const slug = categoryForm.slug || generateSlug(categoryForm.name);
-      const response = await categoriesAPI.create({ 
-        name: categoryForm.name.trim(), 
-        slug: slug 
-      });
+      
+      let response;
+      if (categoryForm.image) {
+        // Use FormData for image upload
+        const formData = new FormData();
+        formData.append('name', categoryForm.name.trim());
+        formData.append('slug', slug);
+        formData.append('image', categoryForm.image);
+        response = await categoriesAPI.create(formData);
+      } else {
+        // Use JSON for text-only
+        response = await categoriesAPI.create({ 
+          name: categoryForm.name.trim(), 
+          slug: slug 
+        });
+      }
       
       // Refresh categories list
       const categoryResponse = await categoriesAPI.getAll();
@@ -141,7 +168,8 @@ const AddProduct: React.FC = () => {
       setCategories(categoryList);
       
       // Reset form and close modal
-      setCategoryForm({ name: "", slug: "" });
+      setCategoryForm({ name: "", slug: "", image: null });
+      setCategoryImagePreview(null);
       setShowCategoryModal(false);
       showAlert('success', '✅ Category added successfully!');
       
@@ -505,7 +533,8 @@ const AddProduct: React.FC = () => {
                 onClick={() => {
                   setShowCategoryModal(false);
                   setErrorMessage("");
-                  setCategoryForm({ name: "", slug: "" });
+                  setCategoryForm({ name: "", slug: "", image: null });
+                  setCategoryImagePreview(null);
                 }}
                 className="text-gray-500 hover:text-gray-700 text-xl"
               >
@@ -552,13 +581,42 @@ const AddProduct: React.FC = () => {
                 </p>
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category Image (optional)
+                </label>
+                
+                {/* Show preview for selected image */}
+                {categoryImagePreview && (
+                  <div className="mb-3 p-2 bg-blue-50 rounded border border-blue-200">
+                    <p className="text-xs text-blue-700 mb-2 font-medium">Image preview:</p>
+                    <img 
+                      src={categoryImagePreview} 
+                      alt="Preview" 
+                      className="w-32 h-32 object-cover rounded border-2 border-blue-300"
+                    />
+                  </div>
+                )}
+                
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={handleCategoryImageChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  JPG, PNG, or WebP (max 5MB)
+                </p>
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => {
                     setShowCategoryModal(false);
                     setErrorMessage("");
-                    setCategoryForm({ name: "", slug: "" });
+                    setCategoryForm({ name: "", slug: "", image: null });
+                    setCategoryImagePreview(null);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >

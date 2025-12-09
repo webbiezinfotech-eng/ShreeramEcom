@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FaHeart, FaEye, FaShoppingCart, FaPlus, FaMinus } from "react-icons/fa";
 import { getProducts, canSeePrices, getLoggedInCustomer } from "../services/api";
@@ -20,9 +20,23 @@ export default function FeaturedProducts() {
     const saved = localStorage.getItem('featured_products_quantity_selectors');
     return saved ? JSON.parse(saved) : {};
   });
+  
+  // Debounce timer ref for input field
+  const inputDebounceTimer = useRef({});
+  
   const navigate = useNavigate();
-  const { addItemToCart } = useCart();
+  const { addItemToCart, cartItems, updateItemQuantity } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
+  
+  // Check if product is already in cart and get cart item
+  const isInCart = (productId) => {
+    return cartItems.some(item => item.product_id === productId || item.id === productId);
+  };
+  
+  // Get cart item for a product
+  const getCartItem = (productId) => {
+    return cartItems.find(item => item.product_id === productId || item.id === productId);
+  };
 
   // Handle product click - check if logged in
   const handleProductClick = (productId) => {
@@ -35,42 +49,128 @@ export default function FeaturedProducts() {
   };
 
   // Handle quantity change
-  const handleQuantityChange = (productId, change) => {
+  // Handle quantity change - update cart immediately if item is in cart
+  const handleQuantityChange = async (productId, change) => {
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    // Calculate new quantity
+    const currentQty = quantities[productId] || 1;
+    const newQty = Math.max(1, currentQty + change);
+    
+    // Update local state
     setQuantities(prev => {
-      const currentQty = prev[productId] || 1;
-      const newQty = Math.max(1, currentQty + change);
       const updated = { ...prev, [productId]: newQty };
-      // Persist to localStorage
       localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
       return updated;
     });
+    
+    // If item is in cart, update cart immediately
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      const cartItemId = cartItem.cart_id || cartItem.id;
+      try {
+        await updateItemQuantity(cartItemId, newQty);
+      } catch (error) {
+        console.error('Error updating cart quantity:', error);
+      }
+    }
   };
 
-  // Handle direct quantity input
-  const handleQuantityInput = (productId, value) => {
+  // Handle direct quantity input - update cart with debounce if item is in cart
+  const handleQuantityInput = async (productId, value) => {
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
     const numValue = parseInt(value) || 1;
     const validQty = Math.max(1, numValue);
+    
+    // Update local state immediately
     setQuantities(prev => {
       const updated = { ...prev, [productId]: validQty };
-      // Persist to localStorage
       localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
       return updated;
     });
+    
+    // Clear previous timer
+    if (inputDebounceTimer.current[productId]) {
+      clearTimeout(inputDebounceTimer.current[productId]);
+    }
+    
+    // Debounce cart update - wait 500ms after user stops typing
+    inputDebounceTimer.current[productId] = setTimeout(async () => {
+      // If item is in cart, update cart
+      const cartItem = getCartItem(productId);
+      if (cartItem) {
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        try {
+          await updateItemQuantity(cartItemId, validQty);
+        } catch (error) {
+          console.error('Error updating cart quantity:', error);
+        }
+      }
+    }, 500);
   };
 
-  // Handle add to cart button click - show quantity selector
-  const handleAddToCartClick = (productId, e) => {
+  // Handle add to cart button click - directly add 1 quantity if not in cart, otherwise show selector
+  const handleAddToCartClick = async (productId, e) => {
+    e.preventDefault();
     e.stopPropagation();
-    // Show quantity selector for this product
-    setShowQuantitySelector(prev => {
-      const updated = { ...prev, [productId]: true };
-      // Persist to localStorage
-      localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
-      return updated;
-    });
+    
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    
+    // If product is already in cart, show quantity selector to add more
+    if (isInCart(productId)) {
+      setShowQuantitySelector(prev => {
+        const updated = { ...prev, [productId]: true };
+        localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
+        return updated;
+      });
+      return;
+    }
+    
+    // If not in cart, directly add 1 quantity
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    setAddingToCart(prev => ({ ...prev, [productId]: true }));
+    
+    try {
+      const result = await addItemToCart(productId, 1);
+      if (result.success) {
+        // Set quantity to 1 for this product
+        setQuantities(prev => {
+          const updated = { ...prev, [productId]: 1 };
+          localStorage.setItem('featured_products_quantities', JSON.stringify(updated));
+          return updated;
+        });
+        // Show quantity selector so user can add more if needed
+        setShowQuantitySelector(prev => {
+          const updated = { ...prev, [productId]: true };
+          localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
+          return updated;
+        });
+      } else if (result.requiresLogin) {
+        setShowLoginPrompt(true);
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [productId]: false }));
+    }
   };
 
-  // Handle add to cart
+  // Handle add to cart - update if already in cart, otherwise add
   const handleAddToCart = async (product, e) => {
     e.stopPropagation();
     const customer = getLoggedInCustomer();
@@ -84,19 +184,37 @@ export default function FeaturedProducts() {
 
     try {
       e.preventDefault(); // Prevent any form submission or page refresh
-      const result = await addItemToCart(product.id, quantity);
-      if (result.success) {
-        // Notification will be shown by CartContext
-        // Don't reset quantity - keep the selected quantity
-        // Keep quantity selector visible
-        setShowQuantitySelector(prev => {
-          const updated = { ...prev, [product.id]: true };
-          // Persist to localStorage
-          localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
-          return updated;
-        });
-      } else if (result.requiresLogin) {
-        setShowLoginPrompt(true);
+      
+      // Check if product is already in cart
+      const cartItem = getCartItem(product.id);
+      
+      if (cartItem) {
+        // Update existing cart item quantity
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        const result = await updateItemQuantity(cartItemId, quantity);
+        if (result.success) {
+          // Notification will be updated by CartContext
+          // Keep quantity selector visible
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev, [product.id]: true };
+            localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      } else {
+        // Add new item to cart
+        const result = await addItemToCart(product.id, quantity);
+        if (result.success) {
+          // Notification will be shown by CartContext
+          // Keep quantity selector visible
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev, [product.id]: true };
+            localStorage.setItem('featured_products_quantity_selectors', JSON.stringify(updated));
+            return updated;
+          });
+        } else if (result.requiresLogin) {
+          setShowLoginPrompt(true);
+        }
       }
     } catch (error) {
       console.error('Error adding to cart:', error);
@@ -133,7 +251,13 @@ export default function FeaturedProducts() {
               <div
                 key={product.id}
                 className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden group cursor-pointer"
-                onClick={() => handleProductClick(product.id)}
+                onClick={(e) => {
+                  // Only navigate if click is not on interactive elements
+                  if (e.target.closest('button, a, input')) {
+                    return;
+                  }
+                  handleProductClick(product.id);
+                }}
               >
                 <div 
                   className="relative h-48 bg-gray-200"
@@ -259,39 +383,90 @@ export default function FeaturedProducts() {
                             <button
                               type="button"
                               onClick={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
                                 handleQuantityChange(product.id, -1);
                               }}
-                              className="p-1.5 hover:bg-gray-50 transition-colors"
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, -1);
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
                               disabled={(quantities[product.id] || 1) <= 1}
                             >
-                              <FaMinus className="text-gray-500" size={10} />
+                              <FaMinus className="text-gray-500 text-sm sm:text-xs" />
                             </button>
                             <input
                               type="number"
                               min="1"
                               value={quantities[product.id] || 1}
                               onChange={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
                                 handleQuantityInput(product.id, e.target.value);
                               }}
-                              onClick={(e) => e.stopPropagation()}
-                              className="w-10 text-center border-0 focus:outline-none focus:ring-0 text-xs font-medium py-1"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.target.select();
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onFocus={(e) => {
+                                e.target.select();
+                              }}
+                              className="w-12 sm:w-10 text-center border-0 focus:outline-none focus:ring-0 text-sm sm:text-xs font-medium py-1 touch-manipulation min-h-[32px]"
                             />
                             <button
                               type="button"
                               onClick={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
                                 handleQuantityChange(product.id, 1);
                               }}
-                              className="p-1.5 hover:bg-gray-50 transition-colors"
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, 1);
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
                             >
-                              <FaPlus className="text-gray-500" size={10} />
+                              <FaPlus className="text-gray-500 text-sm sm:text-xs" />
                             </button>
                           </div>
                           <button
                             type="button"
-                            onClick={(e) => handleAddToCart(product, e)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleAddToCart(product, e);
+                            }}
+                            onTouchStart={(e) => {
+                              e.stopPropagation();
+                            }}
+                            onTouchEnd={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleAddToCart(product, e);
+                            }}
                             disabled={addingToCart[product.id]}
                             className="flex-1 bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -301,7 +476,20 @@ export default function FeaturedProducts() {
                         </div>
                       ) : (
                         <button
-                          onClick={(e) => handleAddToCartClick(product.id, e)}
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleAddToCartClick(product.id, e);
+                          }}
+                          onTouchStart={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchEnd={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleAddToCartClick(product.id, e);
+                          }}
                           className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors text-sm sm:text-base flex items-center justify-center gap-2"
                         >
                           <FaShoppingCart size={14} />

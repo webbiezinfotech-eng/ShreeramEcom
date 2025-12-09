@@ -5,8 +5,10 @@ import { FaTruckFast } from "react-icons/fa6";
 import { BsBoxSeam } from "react-icons/bs";
 import { MdOutlineVerified } from "react-icons/md";
 import { CiBadgeDollar } from "react-icons/ci";
-import { FaWhatsapp } from "react-icons/fa";
 import WelcomePopup from "./WelcomePopup";
+
+// API Base URL for images (should match api.js)
+const API_BASE_URL = "http://192.168.1.6:8000";
 
 function Hero() {
   const [categories, setCategories] = useState([]);
@@ -85,16 +87,6 @@ function Hero() {
             </div>
           </div>
         </div>
-
-        {/* WhatsApp Floating Button */}
-        <a
-          href="https://wa.me/917304044465"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 bg-green-500 p-2.5 sm:p-3 rounded-full shadow-lg text-white hover:bg-green-600 transition-colors z-50"
-        >
-          <FaWhatsapp size={20} className="sm:w-6 sm:h-6" />
-        </a>
       </section>
 
       {/* Categories Section */}
@@ -117,9 +109,23 @@ function Hero() {
                 return (
                   <Link key={cat.id || index} to={`/category/${categoryId}`} className="block">
                     <div className="rounded-xl shadow-md md:shadow-lg border border-[#003fad2c] p-4 md:px-2 flex flex-col items-center hover:shadow-xl transition-shadow">
-                      <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
-                        🎨
-                      </div>
+                      {cat.image ? (
+                        <div className="w-16 h-16 rounded-full overflow-hidden mb-4 border-2 border-[#003fad23]">
+                          <img 
+                            src={`${API_BASE_URL}/api/uploads/${cat.image}`}
+                            alt={cat.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.innerHTML = '<div class="w-16 h-16 bg-[#003fad23] rounded-full flex items-center justify-center">🎨</div>';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
+                          🎨
+                        </div>
+                      )}
                       <h3 className="font-semibold">{cat.name}</h3>
                       <p className="text-gray-500 text-sm">
                         {cat.items_count ? `${cat.items_count}+ items` : "Explore"}

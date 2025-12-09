@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FaSearch,
   FaFilter,
@@ -10,7 +10,7 @@ import {
   FaMinus,
 } from "react-icons/fa";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { getProducts, getCategories, canSeePrices } from "../services/api";
+import { getProducts, getCategories, canSeePrices, getLoggedInCustomer } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import Toast from "./Toast";
@@ -40,8 +40,21 @@ function ProductsPage() {
     const saved = localStorage.getItem('products_page_quantity_selectors');
     return saved ? JSON.parse(saved) : {};
   });
-  const { addItemToCart, getCartCount } = useCart();
+  
+  // Debounce timer ref for input field
+  const inputDebounceTimer = useRef({});
+  const { addItemToCart, getCartCount, cartItems, updateItemQuantity } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
+  
+  // Check if product is already in cart and get cart item
+  const isInCart = (productId) => {
+    return cartItems.some(item => item.product_id === productId || item.id === productId);
+  };
+  
+  // Get cart item for a product
+  const getCartItem = (productId) => {
+    return cartItems.find(item => item.product_id === productId || item.id === productId);
+  };
 
   // ✅ Fetch categories from backend
   useEffect(() => {
@@ -108,60 +121,153 @@ function ProductsPage() {
   // ✅ Sort products
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     switch (sortBy) {
-      case "price-low":
+      case "price-low": {
         return (parseFloat(a.price || 0)) - (parseFloat(b.price || 0));
-      case "price-high":
+      }
+      case "price-high": {
         return (parseFloat(b.price || 0)) - (parseFloat(a.price || 0));
-      case "rating":
+      }
+      case "rating": {
         return (b.rating || 0) - (a.rating || 0);
-      case "name":
+      }
+      case "name": {
         const nameA = (a.title || a.name || '').toLowerCase();
         const nameB = (b.title || b.name || '').toLowerCase();
         return nameA.localeCompare(nameB);
-      default:
+      }
+      default: {
         // Default to A-Z sorting
         const defaultNameA = (a.title || a.name || '').toLowerCase();
         const defaultNameB = (b.title || b.name || '').toLowerCase();
         return defaultNameA.localeCompare(defaultNameB);
+      }
     }
   });
 
-  // Handle quantity change
-  const handleQuantityChange = (productId, change) => {
+  // Handle quantity change - update cart immediately if item is in cart
+  const handleQuantityChange = async (productId, change) => {
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    // Calculate new quantity
+    const currentQty = quantities[productId] || 1;
+    const newQty = Math.max(1, currentQty + change);
+    
+    // Update local state
     setQuantities(prev => {
-      const currentQty = prev[productId] || 1;
-      const newQty = Math.max(1, currentQty + change);
       const updated = { ...prev, [productId]: newQty };
-      // Persist to localStorage
       localStorage.setItem('products_page_quantities', JSON.stringify(updated));
       return updated;
     });
+    
+    // If item is in cart, update cart immediately
+    const cartItem = getCartItem(productId);
+    if (cartItem) {
+      const cartItemId = cartItem.cart_id || cartItem.id;
+      try {
+        await updateItemQuantity(cartItemId, newQty);
+      } catch (error) {
+        console.error('Error updating cart quantity:', error);
+      }
+    }
   };
 
-  // Handle direct quantity input
-  const handleQuantityInput = (productId, value) => {
+  // Handle direct quantity input - update cart with debounce if item is in cart
+  const handleQuantityInput = async (productId, value) => {
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
     const numValue = parseInt(value) || 1;
     const validQty = Math.max(1, numValue);
+    
+    // Update local state immediately
     setQuantities(prev => {
       const updated = { ...prev, [productId]: validQty };
-      // Persist to localStorage
       localStorage.setItem('products_page_quantities', JSON.stringify(updated));
       return updated;
     });
+    
+    // Clear previous timer
+    if (inputDebounceTimer.current[productId]) {
+      clearTimeout(inputDebounceTimer.current[productId]);
+    }
+    
+    // Debounce cart update - wait 500ms after user stops typing
+    inputDebounceTimer.current[productId] = setTimeout(async () => {
+      // If item is in cart, update cart
+      const cartItem = getCartItem(productId);
+      if (cartItem) {
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        try {
+          await updateItemQuantity(cartItemId, validQty);
+        } catch (error) {
+          console.error('Error updating cart quantity:', error);
+        }
+      }
+    }, 500);
   };
 
-  // Handle add to cart button click - show quantity selector
-  const handleAddToCartClick = (productId) => {
-    // Show quantity selector for this product
-    setShowQuantitySelector(prev => {
-      const updated = { ...prev, [productId]: true };
-      // Persist to localStorage
-      localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
-      return updated;
-    });
+  // Handle add to cart button click - directly add 1 quantity if not in cart, otherwise show selector
+  const handleAddToCartClick = async (productId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    
+    // If product is already in cart, show quantity selector to add more
+    if (isInCart(productId)) {
+      setShowQuantitySelector(prev => {
+        const updated = { ...prev, [productId]: true };
+        localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+        return updated;
+      });
+      return;
+    }
+    
+    // If not in cart, directly add 1 quantity
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    setAddingToCart(prev => ({ ...prev, [productId]: true }));
+    
+    try {
+      const result = await addItemToCart(productId, 1);
+      if (result.success) {
+        // Set quantity to 1 for this product
+        setQuantities(prev => {
+          const updated = { ...prev, [productId]: 1 };
+          localStorage.setItem('products_page_quantities', JSON.stringify(updated));
+          return updated;
+        });
+        // Show quantity selector so user can add more if needed
+        setShowQuantitySelector(prev => {
+          const updated = { ...prev, [productId]: true };
+          localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+          return updated;
+        });
+      } else if (result.requiresLogin) {
+        setShowLoginPrompt(true);
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [productId]: false }));
+    }
   };
 
-  // ✅ Cart functions
+  // ✅ Cart functions - update if already in cart, otherwise add
   const addToCart = async (product, e) => {
     if (e) {
       e.preventDefault(); // Prevent any form submission or page refresh
@@ -172,27 +278,47 @@ function ProductsPage() {
     setAddingToCart(prev => ({ ...prev, [product.id]: true }));
     
     try {
-      const result = await addItemToCart(product.id, quantity);
-      if (result.success) {
-        // Notification will be shown by CartContext
-        setToast({ isOpen: true, message: `${product.title || product.name} (${quantity} qty) added to cart!`, type: "success" });
-        // Don't reset quantity - keep the selected quantity
-        // Keep quantity selector visible
-        setShowQuantitySelector(prev => {
-          const updated = { ...prev, [product.id]: true };
-          // Persist to localStorage
-          localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
-          return updated;
-        });
-      } else {
-        if (result.requiresLogin) {
-          setShowLoginPrompt(true);
+      // Check if product is already in cart
+      const cartItem = getCartItem(product.id);
+      
+      if (cartItem) {
+        // Update existing cart item quantity
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        const result = await updateItemQuantity(cartItemId, quantity);
+        if (result.success) {
+          // Notification will be updated by CartContext
+          setToast({ isOpen: true, message: `${product.title || product.name} quantity updated to ${quantity}!`, type: "success" });
+          // Keep quantity selector visible
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev, [product.id]: true };
+            localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+            return updated;
+          });
         } else {
-          setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
+          setToast({ isOpen: true, message: 'Failed to update cart', type: "error" });
+        }
+      } else {
+        // Add new item to cart
+        const result = await addItemToCart(product.id, quantity);
+        if (result.success) {
+          // Notification will be shown by CartContext
+          setToast({ isOpen: true, message: `${product.title || product.name} (${quantity} qty) added to cart!`, type: "success" });
+          // Keep quantity selector visible
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev, [product.id]: true };
+            localStorage.setItem('products_page_quantity_selectors', JSON.stringify(updated));
+            return updated;
+          });
+        } else {
+          if (result.requiresLogin) {
+            setShowLoginPrompt(true);
+          } else {
+            setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
+          }
         }
       }
     } catch (error) {
-      setToast({ isOpen: true, message: 'Failed to add to cart', type: "error" });
+      setToast({ isOpen: true, message: 'Failed to update cart', type: "error" });
     } finally {
       setAddingToCart(prev => ({ ...prev, [product.id]: false }));
     }
@@ -341,7 +467,11 @@ function ProductsPage() {
                 <div
                   key={product.id}
                   className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col cursor-pointer"
-                  onClick={() => {
+                  onClick={(e) => {
+                    // Only navigate if click is not on interactive elements
+                    if (e.target.closest('button, a, input')) {
+                      return;
+                    }
                     if (canSeePrices()) {
                       navigate(`/product/${product.id}`);
                     } else {
@@ -492,50 +622,95 @@ function ProductsPage() {
                           {showQuantitySelector[product.id] ? (
                             <div className="flex items-center gap-2">
                               <div className="flex items-center border border-gray-300 rounded-lg bg-white flex-shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleQuantityChange(product.id, -1);
-                                  }}
-                                  className="p-1.5 hover:bg-gray-50 transition-colors"
-                                  disabled={(quantities[product.id] || 1) <= 1}
-                                >
-                                  <FaMinus className="text-gray-500" size={10} />
-                                </button>
-                                <input
-                                  type="number"
-                                  min="1"
-                                  value={quantities[product.id] || 1}
-                                  onChange={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleQuantityInput(product.id, e.target.value);
-                                  }}
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                  }}
-                                  className="w-10 text-center border-0 focus:outline-none focus:ring-0 text-xs font-medium py-1"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleQuantityChange(product.id, 1);
-                                  }}
-                                  className="p-1.5 hover:bg-gray-50 transition-colors"
-                                >
-                                  <FaPlus className="text-gray-500" size={10} />
-                                </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, -1);
+                              }}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, -1);
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
+                              disabled={(quantities[product.id] || 1) <= 1}
+                            >
+                              <FaMinus className="text-gray-500 text-sm sm:text-xs" />
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={quantities[product.id] || 1}
+                              onChange={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityInput(product.id, e.target.value);
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.target.select();
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onFocus={(e) => {
+                                e.target.select();
+                              }}
+                              className="w-12 sm:w-10 text-center border-0 focus:outline-none focus:ring-0 text-sm sm:text-xs font-medium py-1 touch-manipulation min-h-[32px]"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, 1);
+                              }}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityChange(product.id, 1);
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
+                            >
+                              <FaPlus className="text-gray-500 text-sm sm:text-xs" />
+                            </button>
                               </div>
                               <button
                                 type="button"
-                                onClick={(e) => addToCart(product, e)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  addToCart(product, e);
+                                }}
+                                onTouchStart={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  addToCart(product, e);
+                                }}
                                 disabled={addingToCart[product.id]}
-                                className="flex-1 bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="flex-1 bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                               >
                                 <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                                 {addingToCart[product.id] ? 'Adding...' : 'Add to Cart'}
@@ -549,7 +724,15 @@ function ProductsPage() {
                                 e.stopPropagation();
                                 handleAddToCartClick(product.id);
                               }}
-                              className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleAddToCartClick(product.id);
+                              }}
+                              className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base touch-manipulation"
                             >
                               <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                               Add to Cart

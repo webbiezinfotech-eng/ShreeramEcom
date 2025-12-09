@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { FaCheckCircle, FaTruck, FaBox, FaCreditCard, FaMapMarkerAlt, FaPhone, FaEnvelope, FaDownload, FaPrint, FaShare, FaArrowLeft } from "react-icons/fa";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getOrderById } from "../services/api";
 
 function PlaceOrder() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const orderId = searchParams.get('orderId');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -380,7 +379,7 @@ function PlaceOrder() {
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 className="text-xl font-semibold text-gray-800 mb-6">Order Tracking</h2>
                 <div className="space-y-4">
-                  {trackingSteps.map((step, index) => (
+                  {trackingSteps.map((step) => (
                   <div key={step.id} className="flex items-start gap-4">
                     <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                       step.status === "completed" ? "bg-green-500 text-white" :

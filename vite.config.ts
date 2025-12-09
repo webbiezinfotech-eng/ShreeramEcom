@@ -25,9 +25,10 @@ export default defineConfig({
     }
   },
   server: {
-    port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+    port: process.env.PORT ? parseInt(process.env.PORT) : 5174,
     open: true,
-    host: true
+    host: '0.0.0.0', // Allow access from network (phone on same WiFi)
+    strictPort: false,
   },
   build: {
     outDir: 'dist',

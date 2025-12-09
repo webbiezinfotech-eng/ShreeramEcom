@@ -45,9 +45,8 @@ function Register() {
       newErrors.fullName = "Full name must be at least 2 characters";
     }
 
-    if (!formData.email) {
-      newErrors.email = "Email is required";
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+    // Email is optional, but validate format if provided
+    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Email is invalid";
     }
 
@@ -172,7 +171,7 @@ function Register() {
             {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                Email Address
+                Email Address <span className="text-gray-500 font-normal">(optional)</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -200,7 +199,7 @@ function Register() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <label htmlFor="phone" className="block text-xs sm:text-sm font-medium text-gray-700 mb-1.5 sm:mb-2">
-                  Phone Number
+                  Phone Number *
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
