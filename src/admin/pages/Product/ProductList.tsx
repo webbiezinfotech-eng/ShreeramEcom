@@ -23,6 +23,7 @@ const ProductList: React.FC = () => {
   const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
   const pageSize = 20;
 
@@ -38,7 +39,7 @@ const ProductList: React.FC = () => {
     totalItems,
     currentPage,
     setCurrentPage,
-  } = useProducts(1, pageSize, searchTerm);
+  } = useProducts(1, pageSize, searchTerm, selectedCategory);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   
@@ -75,7 +76,14 @@ const ProductList: React.FC = () => {
     (async () => {
       try {
         const res = await categoriesAPI.getAll();
-        setCategories(pickArray(res) as Category[]);
+        const allCats = pickArray(res) as Category[];
+        // Filter out invalid categories (only numbers, empty names, etc.)
+        const validCategories = allCats.filter(cat => {
+          const name = (cat.name || '').trim();
+          // Filter out: empty names, only numbers, names shorter than 2 characters
+          return name.length >= 2 && !/^\d+$/.test(name);
+        });
+        setCategories(validCategories);
       } catch (e) {
         console.warn("Failed to load categories", e);
         setCategories([]);
@@ -94,10 +102,15 @@ const ProductList: React.FC = () => {
     return () => clearTimeout(handler);
   }, [searchInput, setCurrentPage, setSearchTerm]);
 
+  // Reset page when category changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, setCurrentPage]);
+
   // Clear selection when products change (page change, search, etc.)
   useEffect(() => {
     setSelectedProducts([]);
-  }, [currentPage, searchTerm]);
+  }, [currentPage, searchTerm, selectedCategory]);
 
   const paginationRange = useMemo(() => {
     const pages: number[] = [];
@@ -475,15 +488,42 @@ const ProductList: React.FC = () => {
       {/* Search + Actions */}
       <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 mb-6">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
-            />
-            <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+          <div className="flex gap-3 items-center">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-64"
+              />
+              <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+            </div>
+            <select
+              value={selectedCategory ?? ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || val === "0") {
+                  setSelectedCategory(null);
+                } else {
+                  const catId = parseInt(val, 10);
+                  if (!isNaN(catId) && catId > 0) {
+                    setSelectedCategory(catId);
+                  } else {
+                    setSelectedCategory(null);
+                  }
+                }
+                setCurrentPage(1); // Reset to first page when category changes
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white min-w-[180px]"
+            >
+              <option value="">All Categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="flex gap-4 flex-wrap">
             <button onClick={() => navigate("/admin/products/add")} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors">📦 Add New Product</button>
@@ -917,8 +957,8 @@ const EditProductModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white w-full max-w-2xl rounded-xl shadow-xl p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 overflow-y-auto py-4">
+      <div className="bg-white w-full max-w-xl rounded-xl shadow-xl p-4 my-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Edit Product</h3>
           <button className="text-gray-500" onClick={onClose}>✖</button>

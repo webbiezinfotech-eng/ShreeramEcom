@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaPhoneAlt, FaHeart } from "react-icons/fa";
 import { AiOutlineShoppingCart, AiOutlineSearch } from "react-icons/ai";
 import { FiUser } from "react-icons/fi";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import { getLoggedInCustomer, logoutCustomer } from "../services/api";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import logo from "../assets/srlogo.png";
 
 function Navbar() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [active, setActive] = useState("Home");
   const [searchQuery, setSearchQuery] = useState("");
@@ -52,9 +53,16 @@ function Navbar() {
     };
   }, []);
 
-  // Auto-detect active page based on current URL
+  // Auto-detect active page based on current URL and sync search query
   useEffect(() => {
-    const currentPath = window.location.pathname;
+    const currentPath = location.pathname;
+    const urlParams = new URLSearchParams(location.search);
+    const urlSearchQuery = urlParams.get('q') || '';
+
+    // Sync search query from URL (only if different to avoid loops)
+    if (urlSearchQuery !== searchQuery) {
+      setSearchQuery(urlSearchQuery);
+    }
 
     if (currentPath === "/") {
       setActive("Home");
@@ -67,6 +75,15 @@ function Navbar() {
     } else {
       setActive("Home");
     }
+  }, [location.pathname, location.search]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceTimer.current) {
+        clearTimeout(searchDebounceTimer.current);
+      }
+    };
   }, []);
 
   // Close sidebar on escape key and prevent body scroll when open
@@ -90,9 +107,36 @@ function Navbar() {
     };
   }, [isOpen]);
 
-  // Handle search
+  // Debounce timer for search
+  const searchDebounceTimer = useRef(null);
+
+  // Handle search input change - dynamic search
+  const handleSearchChange = (value) => {
+    setSearchQuery(value);
+    
+    // Clear existing timer
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current);
+    }
+    
+    // Update URL after 300ms of no typing (debounce)
+    // If value is empty, navigate immediately to show all products
+    if (!value.trim()) {
+      navigate("/products");
+    } else {
+      searchDebounceTimer.current = setTimeout(() => {
+        navigate(`/products?q=${encodeURIComponent(value.trim())}`);
+      }, 300);
+    }
+  };
+
+  // Handle search form submit
   const handleSearch = (e) => {
     e.preventDefault();
+    // Clear timer if user submits manually
+    if (searchDebounceTimer.current) {
+      clearTimeout(searchDebounceTimer.current);
+    }
     if (searchQuery.trim()) {
       navigate(`/products?q=${encodeURIComponent(searchQuery.trim())}`);
     } else {
@@ -130,24 +174,35 @@ function Navbar() {
 
   return (
     <div>
-      {/* Top Bar */}
-      <div className="bg-[#0b1b35] text-white text-xs sm:text-sm md:text-base lg:text-[17px] py-2 md:py-3 lg:py-4 px-3 sm:px-4 md:px-6 lg:px-10 xl:px-16 flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
-        <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
-          <span className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm md:text-base">
-            <FaPhoneAlt className="text-[#FE7F06] text-xs sm:text-sm" /> 
-            <span className="whitespace-nowrap">+91 7304044465</span>
+      {/* Top Bar - Ultra Compact for Mobile */}
+      <div className="bg-[#0b1b35] text-white py-1 sm:py-1.5 md:py-2 px-2 sm:px-3 md:px-4 lg:px-6 flex flex-row items-center justify-between gap-1 sm:gap-2 relative h-[28px] sm:h-[32px] md:h-auto">
+        {/* Left: Phone Number */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="flex items-center gap-0.5 text-[9px] sm:text-[10px] md:text-xs lg:text-sm">
+            <FaPhoneAlt className="text-[#FE7F06] text-[9px] sm:text-[10px] md:text-xs" /> 
+            <span className="whitespace-nowrap hidden sm:inline">+91 7304044465</span>
+            <span className="whitespace-nowrap sm:hidden">+91 7304...</span>
           </span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm md:text-base">
+        
+        {/* Center: Fixed Text - Responsive & Compact */}
+        <div className="flex-1 flex justify-center items-center mx-0.5 sm:mx-1 md:mx-2">
+          <div className="text-center text-[9px] sm:text-[10px] md:text-xs lg:text-sm font-medium whitespace-nowrap">
+            Shreeram Stationery
+          </div>
+        </div>
+        
+        {/* Right: Login/Logout - Compact */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           {customer ? (
             <>
-              <span className="text-xs sm:text-sm truncate max-w-[120px] sm:max-w-none">Welcome, {customer.name || customer.email}</span>
-              <button onClick={handleLogout} className="hover:underline whitespace-nowrap">Logout</button>
+              <span className="text-[9px] sm:text-[10px] md:text-xs truncate max-w-[50px] sm:max-w-[70px] md:max-w-none hidden sm:inline">Welcome</span>
+              <button onClick={handleLogout} className="hover:underline whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs">Logout</button>
             </>
           ) : (
             <>
-              <Link to="/login" className="hover:underline whitespace-nowrap">Login</Link>
-              <Link to="/register" className="hover:underline whitespace-nowrap">Register</Link>
+              <Link to="/login" className="hover:underline whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs">Login</Link>
+              <Link to="/register" className="hover:underline whitespace-nowrap text-[9px] sm:text-[10px] md:text-xs hidden md:inline">Register</Link>
             </>
           )}
         </div>
@@ -185,7 +240,7 @@ function Navbar() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="Search products..."
                 className="px-2 sm:px-3 py-2 sm:py-2.5 w-full outline-none text-sm sm:text-base bg-transparent"
               />
@@ -235,7 +290,7 @@ function Navbar() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="Search products..."
               className="px-2 py-2 w-full outline-none text-sm bg-transparent"
             />

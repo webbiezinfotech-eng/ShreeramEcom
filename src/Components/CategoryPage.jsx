@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { FaSearch, FaFilter, FaShoppingCart, FaStar, FaHeart, FaEye, FaArrowLeft } from "react-icons/fa";
+import { FaSearch, FaShoppingCart, FaStar, FaHeart, FaEye, FaArrowLeft, FaPlus, FaMinus, FaFilter } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
-import { getProducts, getProductsByCategory, getCategories, canSeePrices } from "../services/api";
+import { getProducts, getProductsByCategory, getCategories, canSeePrices, getLoggedInCustomer } from "../services/api";
 import { useCart } from "../contexts/CartContext";
 import { useWishlist } from "../contexts/WishlistContext";
 import Toast from "./Toast";
@@ -11,17 +11,40 @@ import LoginPrompt from "./LoginPrompt";
 function CategoryPage() {
   const navigate = useNavigate();
   const { category } = useParams();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [priceRange, setPriceRange] = useState([0, 10000]);
-  const [sortBy, setSortBy] = useState("featured");
-  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ isOpen: false, message: "", type: "success" });
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const { addItemToCart, getCartCount } = useCart();
+  const [quantities, setQuantities] = useState({});
+  const [addingToCart, setAddingToCart] = useState({});
+  const [showQuantitySelector, setShowQuantitySelector] = useState({});
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const pageSize = 20;
+  
+  // Debounce timer ref for input field
+  const inputDebounceTimer = useRef({});
+  // Track touch positions to prevent accidental clicks during scroll
+  const touchStartPos = useRef({});
+  
+  const { addItemToCart, getCartCount, cartItems, updateItemQuantity } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
+  
+  // Check if product is already in cart and get cart item
+  const isInCart = (productId) => {
+    return cartItems.some(item => item.product_id === productId || item.id === productId);
+  };
+  
+  // Get cart item for a product
+  const getCartItem = (productId) => {
+    return cartItems.find(item => item.product_id === productId || item.id === productId);
+  };
 
   // Keyword-based category mapping (define BEFORE using it) - Separate categories
   const categoryKeywords = {
@@ -102,22 +125,35 @@ function CategoryPage() {
 
   const currentCategory = getCurrentCategoryInfo();
 
-  // ✅ Load categories and products from API
+  // ✅ Load categories and products from API with pagination
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
       try {
         // First load categories
         const cats = await getCategories();
-        setCategories(cats || []);
+        // Filter out invalid categories (only numbers, empty names, etc.)
+        const validCategories = (cats || []).filter(cat => {
+          const name = (cat.name || '').trim();
+          // Filter out: empty names, only numbers, names shorter than 2 characters
+          return name.length >= 2 && !/^\d+$/.test(name);
+        });
+        setCategories(validCategories);
         
         // Then load products based on category
-        let prods = [];
+        let result = { products: [], total: 0, page: 1, limit: pageSize, totalPages: 1 };
         const currentCategory = category;
         
         if (!currentCategory || currentCategory === "all-products") {
-          // Fetch all products
-          prods = await getProducts();
+          // Fetch all products with pagination
+          const allProds = await getProducts(pageSize, currentPage);
+          result = {
+            products: allProds || [],
+            total: allProds?.length || 0,
+            page: currentPage,
+            limit: pageSize,
+            totalPages: 1
+          };
         } else {
           // Find category ID
           let categoryId = null;
@@ -128,38 +164,89 @@ function CategoryPage() {
             if (cat) categoryId = cat.id;
           }
           
-          // Try slug match
+          // Try slug match - handle different formats
           if (!categoryId) {
+            const currentCategoryLower = currentCategory.toLowerCase();
             const cat = cats.find(c => {
               const nameSlug = c.name?.toLowerCase().replace(/\s+/g, '-');
-              return c.slug === currentCategory || nameSlug === currentCategory || c.name?.toLowerCase() === currentCategory.toLowerCase();
+              const catSlug = (c.slug || '').toLowerCase();
+              const catNameLower = (c.name || '').toLowerCase();
+              
+              // Match by slug
+              if (catSlug === currentCategoryLower) return true;
+              // Match by name slug
+              if (nameSlug === currentCategoryLower) return true;
+              // Match by direct name (case insensitive)
+              if (catNameLower === currentCategoryLower) return true;
+              // Match by name with spaces replaced
+              if (catNameLower.replace(/\s+/g, '-') === currentCategoryLower) return true;
+              // Match by name with dashes replaced with spaces
+              if (catNameLower === currentCategoryLower.replace(/-/g, ' ')) return true;
+              
+              return false;
             });
             if (cat) categoryId = cat.id;
           }
           
           if (categoryId) {
-            // Fetch products for specific category
-            prods = await getProductsByCategory(categoryId);
+            // Fetch products for specific category with pagination
+            result = await getProductsByCategory(categoryId, pageSize, currentPage);
           } else {
-            // Check if it's a keyword-based category - fetch all products, filtering will happen in getCategoryProducts
-            prods = await getProducts();
+            // Fallback: fetch all products
+            result = await getProducts(pageSize, currentPage);
           }
         }
         
-        setProducts(prods || []);
+        setProducts(result.products || []);
+        setTotalItems(result.total || 0);
+        setTotalPages(result.totalPages || 1);
       } catch (error) {
-        // Silently handle error
+        console.error("Error fetching products:", error);
+        setProducts([]);
+        setTotalItems(0);
+        setTotalPages(1);
       } finally {
         setLoading(false);
       }
     }
     fetchData();
+  }, [category, currentPage]);
+  
+  // Reset to page 1 when category changes and close dropdown
+  useEffect(() => {
+    setCurrentPage(1);
+    setShowCategoryDropdown(false); // Close dropdown when category changes
   }, [category]);
 
-  // ✅ Find category ID from category slug
+  // Sync quantities from cart items when cart loads
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      const newQuantities = {};
+      const newSelectors = {};
+      
+      cartItems.forEach(item => {
+        const productId = item.product_id || item.id;
+        if (productId) {
+          newQuantities[productId] = item.quantity || 1;
+          newSelectors[productId] = true; // Show selector for items in cart
+        }
+      });
+      
+      setQuantities(prev => ({ ...prev, ...newQuantities }));
+      setShowQuantitySelector(prev => ({ ...prev, ...newSelectors }));
+    } else {
+      // If cart is empty, clear all quantities and selectors
+      setQuantities({});
+      setShowQuantitySelector({});
+    }
+  }, [cartItems]);
+
+  // ✅ Find category ID from category slug - improved matching for all formats
   const findCategoryId = () => {
     if (!category || category === "all-products") return null;
     if (categories.length === 0) return null;
+    
+    const categoryLower = category.toLowerCase();
     
     // First try to find by numeric ID
     if (!isNaN(category)) {
@@ -167,20 +254,37 @@ function CategoryPage() {
       if (cat) return cat.id;
     }
     
-    // Try to find by slug
-    let cat = categories.find(c => c.slug === category);
+    // Try to find by slug (exact match, case insensitive)
+    let cat = categories.find(c => {
+      const catSlug = (c.slug || '').toLowerCase();
+      return catSlug === categoryLower;
+    });
     
     // If not found, try to match by name (converted to slug)
     if (!cat) {
       cat = categories.find(c => {
-        const nameSlug = c.name?.toLowerCase().replace(/\s+/g, '-');
-        return nameSlug === category;
+        const nameSlug = (c.name || '').toLowerCase().replace(/\s+/g, '-');
+        return nameSlug === categoryLower;
       });
     }
     
-    // Try direct name match
+    // Try direct name match (case insensitive)
     if (!cat) {
-      cat = categories.find(c => c.name?.toLowerCase() === category.toLowerCase());
+      cat = categories.find(c => {
+        const catNameLower = (c.name || '').toLowerCase();
+        return catNameLower === categoryLower || catNameLower === categoryLower.replace(/-/g, ' ');
+      });
+    }
+    
+    // Try matching with spaces/dashes interchanged
+    if (!cat) {
+      cat = categories.find(c => {
+        const catNameLower = (c.name || '').toLowerCase();
+        const categoryWithSpaces = categoryLower.replace(/-/g, ' ');
+        const categoryWithDashes = categoryLower.replace(/\s+/g, '-');
+        return catNameLower === categoryWithSpaces || 
+               catNameLower.replace(/\s+/g, '-') === categoryWithDashes;
+      });
     }
     
     return cat ? cat.id : null;
@@ -234,118 +338,195 @@ function CategoryPage() {
     return null;
   };
 
-  // ✅ Filter products based on category from API data
-  const getCategoryProducts = () => {
-    if (!products.length) return [];
-    if (!category || category === "all-products") return products;
-    
-    // First try to find category ID from database
-    const categoryId = findCategoryId();
-    if (categoryId) {
-      const filtered = products.filter(product => product.category_id === categoryId);
-      if (filtered.length > 0) return filtered;
-    }
-    
-    // Check if it's a predefined keyword category
-    if (categoryKeywords[category]) {
-      const filtered = products.filter(product => matchesKeywordCategory(product, category));
-      if (filtered.length > 0) return filtered;
-    }
-    
-    // Check if category slug contains keywords (e.g., "kangaro-staplers" contains "stapler")
-    const matchedKeywordCategory = findKeywordMatch(category);
-    if (matchedKeywordCategory) {
-      const filtered = products.filter(product => matchesKeywordCategory(product, matchedKeywordCategory));
-      if (filtered.length > 0) return filtered;
-    }
-    
-    // Try to match with database category names (convert category slug back to name)
-    const categoryNameFromSlug = category.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    const dbCategoryMatch = categories.find(cat => {
-      const catSlug = (cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-') || '').toLowerCase();
-      const catNameLower = cat.name?.toLowerCase() || '';
-      return catSlug === category || catNameLower === category.toLowerCase() || 
-             catNameLower === categoryNameFromSlug.toLowerCase();
-    });
-    
-    if (dbCategoryMatch) {
-      const filtered = products.filter(product => 
-        product.category_id === dbCategoryMatch.id || 
-        (product.category || product.category_name || '').toLowerCase() === dbCategoryMatch.name?.toLowerCase()
-      );
-      if (filtered.length > 0) return filtered;
-    }
-    
-    // Fallback: filter by category name/slug from product data
-    const filtered = products.filter(product => {
-      const productCategory = product.category || product.category_name || "";
-      const catSlug = productCategory.toLowerCase().replace(/\s+/g, '-');
-      const productName = (product.name || product.title || "").toLowerCase();
-      const categoryLower = category.toLowerCase();
-      
-      // Check if category slug matches product category
-      if (catSlug === categoryLower || productCategory.toLowerCase() === categoryLower) {
-        return true;
+  // ✅ Products are already filtered by backend API, just filter out inactive
+  const filteredProducts = products.filter(product => {
+    return product.status !== 'inactive';
+  });
+
+  // Handle quantity change - update cart immediately if item is in cart
+  const handleQuantityChange = async (productId, change, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target) {
+        e.target.blur();
       }
-      
-      // Check if product name contains category slug keywords
-      const categoryWords = categoryLower.replace(/-/g, ' ').split(' ');
-      if (categoryWords.some(word => word.length > 2 && productName.includes(word))) {
-        return true;
-      }
-      
-      // Check if product category contains category slug
-      if (productCategory.toLowerCase().includes(categoryLower.replace(/-/g, ' '))) {
-        return true;
-      }
-      
-      return false;
-    });
+    }
     
-    // If no matches found, return all products (better than showing blank page)
-    return filtered.length > 0 ? filtered : products;
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    const existingCartItem = getCartItem(productId);
+    const currentQty = existingCartItem ? existingCartItem.quantity : (quantities[productId] || 1);
+    const newQty = Math.max(0, currentQty + change);
+    
+    setQuantities(prev => ({ ...prev, [productId]: newQty }));
+    
+    if (existingCartItem) {
+      const cartItemId = existingCartItem.cart_id || existingCartItem.id;
+      try {
+        await updateItemQuantity(cartItemId, newQty);
+        if (newQty === 0) {
+          setShowQuantitySelector(prev => {
+            const updated = { ...prev };
+            delete updated[productId];
+            return updated;
+          });
+        }
+      } catch (error) {
+        console.error('Error updating cart quantity:', error);
+      }
+    }
   };
 
-  const categoryProducts = getCategoryProducts();
-
-  const filteredProducts = categoryProducts.filter(product => {
-    // Hide inactive products completely
-    if (product.status === 'inactive') {
-      return false;
+  // Handle direct quantity input
+  const handleQuantityInput = async (productId, value) => {
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
     }
 
-    const matchesSearch = 
-      (product.title || product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesPrice = 
-      (product.price || 0) >= priceRange[0] && 
-      (product.price || 0) <= priceRange[1];
+    const numValue = value === '' ? 0 : parseInt(value);
+    const validQty = isNaN(numValue) ? 0 : Math.max(0, numValue);
     
-    return matchesSearch && matchesPrice;
-  });
-
-  const sortedProducts = [...filteredProducts].sort((a, b) => {
-    switch (sortBy) {
-      case "price-low":
-        return (a.price || 0) - (b.price || 0);
-      case "price-high":
-        return (b.price || 0) - (a.price || 0);
-      case "rating":
-        return (b.rating || 0) - (a.rating || 0);
-      case "name":
-        return (a.title || a.name || '').localeCompare(b.title || b.name || '');
-      default:
-        return 0;
+    setQuantities(prev => ({ ...prev, [productId]: validQty }));
+    
+    if (inputDebounceTimer.current[productId]) {
+      clearTimeout(inputDebounceTimer.current[productId]);
     }
-  });
+    
+    inputDebounceTimer.current[productId] = setTimeout(async () => {
+      const cartItem = getCartItem(productId);
+      if (cartItem) {
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        try {
+          await updateItemQuantity(cartItemId, validQty);
+          if (validQty === 0) {
+            setShowQuantitySelector(prev => {
+              const updated = { ...prev };
+              delete updated[productId];
+              return updated;
+            });
+          }
+        } catch (error) {
+          console.error('Error updating cart quantity:', error);
+        }
+      }
+    }, 500);
+  };
 
-  // ✅ Add to cart using CartContext
-  const handleAddToCart = async (product) => {
-    const result = await addItemToCart(product.id, 1);
+  // Helper function to handle touch start
+  const handleTouchStart = (e, key) => {
+    const touch = e.touches[0];
+    touchStartPos.current[key] = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+  };
+
+  // Helper function to check if touch was a proper click
+  const isProperClick = (e, key) => {
+    if (!touchStartPos.current[key]) return false;
+    
+    const touch = e.changedTouches[0];
+    const startPos = touchStartPos.current[key];
+    const deltaX = Math.abs(touch.clientX - startPos.x);
+    const deltaY = Math.abs(touch.clientY - startPos.y);
+    const deltaTime = Date.now() - startPos.time;
+    
+    delete touchStartPos.current[key];
+    
+    return deltaX < 10 && deltaY < 10 && deltaTime < 300;
+  };
+
+  // Handle add to cart button click
+  const handleAddToCartClick = async (productId, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target) {
+        e.target.blur();
+      }
+    }
+    
+    const customer = getLoggedInCustomer();
+    if (!customer) {
+      setShowLoginPrompt(true);
+      return;
+    }
+    
+    if (isInCart(productId)) {
+      setShowQuantitySelector(prev => ({ ...prev, [productId]: true }));
+      return;
+    }
+    
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    setAddingToCart(prev => ({ ...prev, [productId]: true }));
+    
+    try {
+      const result = await addItemToCart(productId, 1);
+      if (result.success) {
+        setQuantities(prev => ({ ...prev, [productId]: 1 }));
+        setShowQuantitySelector(prev => ({ ...prev, [productId]: true }));
+      } else if (result.requiresLogin) {
+        setShowLoginPrompt(true);
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [productId]: false }));
+    }
+  };
+
+  // Add to cart with quantity
+  const addToCart = async (product, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target) {
+        e.target.blur();
+      }
+    }
+    
+    const quantity = quantities[product.id] || 1;
+    setAddingToCart(prev => ({ ...prev, [product.id]: true }));
+    
+    try {
+      const cartItem = getCartItem(product.id);
+      
+      if (cartItem) {
+        const cartItemId = cartItem.cart_id || cartItem.id;
+        const result = await updateItemQuantity(cartItemId, quantity);
+        if (result.success) {
+          setToast({ isOpen: true, message: `${product.title || product.name} quantity updated to ${quantity}!`, type: "success" });
+          setShowQuantitySelector(prev => ({ ...prev, [product.id]: true }));
+        } else {
+          setToast({ isOpen: true, message: 'Failed to update cart', type: "error" });
+        }
+      } else {
+        const result = await addItemToCart(product.id, quantity);
     if (result.success) {
-      setToast({ isOpen: true, message: `${product.title || product.name} added to cart!`, type: "success" });
+          setToast({ isOpen: true, message: `${product.title || product.name} (${quantity} qty) added to cart!`, type: "success" });
+          setShowQuantitySelector(prev => ({ ...prev, [product.id]: true }));
+        } else {
+          if (result.requiresLogin) {
+            setShowLoginPrompt(true);
     } else {
-      setToast({ isOpen: true, message: 'Failed to add to cart: ' + (result.error || 'Unknown error'), type: "error" });
+            setToast({ isOpen: true, message: 'Failed to add to cart: ' + result.error, type: "error" });
+          }
+        }
+      }
+    } catch (error) {
+      setToast({ isOpen: true, message: 'Failed to update cart', type: "error" });
+    } finally {
+      setAddingToCart(prev => ({ ...prev, [product.id]: false }));
     }
   };
 
@@ -390,99 +571,119 @@ function CategoryPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Filters */}
-          <div className={`lg:w-1/4 ${showFilters ? 'block' : 'hidden lg:block'}`}>
-            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-4">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold">
-                  <span className="text-[#002D7A]">Fil</span><span className="text-[#FE7F06]">ters</span>
-                </h3>
-                <button 
-                  onClick={() => setShowFilters(false)}
-                  className="lg:hidden text-gray-500 hover:text-gray-700"
-                >
-                  ✕
-                </button>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        {/* Category Buttons - Desktop: Show all, Mobile: Compact Button */}
+        <div className="mb-4 sm:mb-6">
+          {/* Mobile: Compact Category Button - Only shows selected category name */}
+          <div className="lg:hidden relative">
+            <button
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="flex items-center justify-between gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white w-full text-sm"
+            >
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <FaFilter className="text-gray-500 flex-shrink-0" size={14} />
+                <span className="font-medium text-gray-700 truncate">
+                  {currentCategory.title}
+                </span>
               </div>
-
-              {/* Search */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search Products
-                </label>
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search products..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Price Range */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Price Range: ₹{priceRange[0]} - ₹{priceRange[1]}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="10000"
-                  value={priceRange[1]}
-                  onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                  className="w-full"
+              <span className={`text-gray-400 text-xs flex-shrink-0 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            
+            {/* Mobile Dropdown - Only shows when clicked */}
+            {showCategoryDropdown && (
+              <>
+                {/* Backdrop */}
+                <div 
+                  className="fixed inset-0 bg-black/20 z-40 lg:hidden"
+                  onClick={() => setShowCategoryDropdown(false)}
                 />
-                <div className="flex justify-between text-sm text-gray-500 mt-1">
-                  <span>₹0</span>
-                  <span>₹10,000</span>
+                {/* Dropdown Box - Compact */}
+                <div className="absolute top-full left-0 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[45vh] overflow-hidden flex flex-col">
+                  <div className="p-2.5 border-b border-gray-200 bg-white flex-shrink-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold text-[#002D7A]">Select Category</h3>
+                      <button
+                        onClick={() => setShowCategoryDropdown(false)}
+                        className="text-gray-500 hover:text-gray-700 text-base leading-none w-5 h-5 flex items-center justify-center"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-1.5 space-y-0.5 overflow-y-auto flex-1">
+                    <Link
+                      to="/products"
+                      onClick={() => setShowCategoryDropdown(false)}
+                      className={`block w-full text-left px-2.5 py-1.5 rounded transition-colors text-xs ${
+                        !category || category === "all-products"
+                          ? "bg-[#002D7A] text-white font-medium"
+                          : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                      }`}
+                    >
+                      All Categories
+                    </Link>
+                    {categories.map((cat) => {
+                      const categorySlug = cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-') || cat.id;
+                      const isActive = category === categorySlug || category === cat.id.toString();
+                      return (
+                        <Link
+                          key={cat.id}
+                          to={`/category/${categorySlug}`}
+                          onClick={() => setShowCategoryDropdown(false)}
+                          className={`block w-full text-left px-2.5 py-1.5 rounded transition-colors text-xs ${
+                            isActive
+                              ? "bg-[#002D7A] text-white font-medium"
+                              : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                          }`}
+                        >
+                          {cat.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-
-              {/* Sort By */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sort By
-                </label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
-                >
-                  <option value="featured">Featured</option>
-                  <option value="price-low">Price: Low to High</option>
-                  <option value="price-high">Price: High to Low</option>
-                  <option value="rating">Highest Rated</option>
-                  <option value="name">Name A-Z</option>
-                </select>
-              </div>
-
-              {/* Results Count */}
-              <div className="text-sm text-gray-600">
-                Showing {sortedProducts.length} of {categoryProducts.length} products
-              </div>
-            </div>
+              </>
+            )}
           </div>
-
-          {/* Main Content */}
-          <div className="lg:w-3/4">
-            {/* Top Bar */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setShowFilters(true)}
-                  className="lg:hidden flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          
+          {/* Desktop: Show all category buttons */}
+          <div className="hidden lg:flex flex-wrap gap-2 sm:gap-3">
+            <Link
+              to="/products"
+              className={`px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${
+                !category || category === "all-products"
+                  ? "bg-[#002D7A] text-white font-medium"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              All Categories
+            </Link>
+            {categories.map((cat) => {
+              const categorySlug = cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-') || cat.id;
+              const isActive = category === categorySlug || category === cat.id.toString();
+              return (
+                <Link
+                  key={cat.id}
+                  to={`/category/${categorySlug}`}
+                  className={`px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${
+                    isActive
+                      ? "bg-[#002D7A] text-white font-medium"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  }`}
                 >
-                  <FaFilter />
-                  Filters
-                </button>
-                <div className="text-sm text-gray-600">
-                  {sortedProducts.length} products found in {currentCategory.title}
-                </div>
+                  {cat.name}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div>
+          {/* Top Bar */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-4">
+              <div className="text-sm text-gray-600">
+              {filteredProducts.length} products found in {currentCategory.title}
               </div>
               
               <div className="flex items-center gap-2">
@@ -496,7 +697,7 @@ function CategoryPage() {
 
             {/* Products Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-              {sortedProducts.map((product) => (
+            {filteredProducts.map((product) => (
                 <div 
                   key={product.id} 
                   className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col cursor-pointer"
@@ -621,47 +822,243 @@ function CategoryPage() {
                       </div>
                     )}
 
-                    {/* Action Buttons */}
                     <div className="space-y-2 mt-auto">
+                      {/* Quantity Selector & Add to Cart - Blue Button at Top */}
+                      {canSeePrices() && product.status === 'active' && product.status !== 'out_of_stock' ? (
+                        <div>
+                          {showQuantitySelector[product.id] ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center border border-gray-300 rounded-lg bg-white flex-shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.target.blur();
+                                    handleQuantityChange(product.id, -1, e);
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleTouchStart(e, `qty-minus-${product.id}`);
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (isProperClick(e, `qty-minus-${product.id}`)) {
+                                      e.target.blur();
+                                      handleQuantityChange(product.id, -1, e);
+                                    }
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
+                                >
+                                  <FaMinus className="text-gray-500 text-sm sm:text-xs" />
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={quantities[product.id] || 1}
+                                  onChange={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleQuantityInput(product.id, e.target.value);
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.target.select();
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.stopPropagation();
+                                  }}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                  }}
+                                  className="w-12 sm:w-10 text-center border-0 focus:outline-none focus:ring-0 text-sm sm:text-xs font-medium py-1 touch-manipulation min-h-[32px]"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    e.target.blur();
+                                    handleQuantityChange(product.id, 1, e);
+                                  }}
+                                  onTouchStart={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleTouchStart(e, `qty-plus-${product.id}`);
+                                  }}
+                                  onTouchEnd={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (isProperClick(e, `qty-plus-${product.id}`)) {
+                                      e.target.blur();
+                                      handleQuantityChange(product.id, 1, e);
+                                    }
+                                  }}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="p-2 sm:p-1.5 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
+                                >
+                                  <FaPlus className="text-gray-500 text-sm sm:text-xs" />
+                                </button>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  e.target.blur();
+                                  addToCart(product, e);
+                                }}
+                                onTouchStart={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleTouchStart(e, `add-cart-${product.id}`);
+                                }}
+                                onTouchEnd={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (isProperClick(e, `add-cart-${product.id}`)) {
+                                    e.target.blur();
+                                    addToCart(product, e);
+                                  }
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                                disabled={addingToCart[product.id]}
+                                className="flex-1 bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                              >
+                                <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
+                                {addingToCart[product.id] ? 'Adding...' : 'Add to Cart'}
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.target.blur();
+                                handleAddToCartClick(product.id, e);
+                              }}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleTouchStart(e, `add-cart-btn-${product.id}`);
+                              }}
+                              onTouchEnd={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isProperClick(e, `add-cart-btn-${product.id}`)) {
+                                  e.target.blur();
+                                  handleAddToCartClick(product.id, e);
+                                }
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base touch-manipulation"
+                            >
+                              <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
+                              Add to Cart
+                            </button>
+                          )}
+                        </div>
+                      ) : product.status === 'out_of_stock' ? (
+                        <div className="w-full bg-red-100 border border-red-300 text-red-700 font-medium py-2 px-3 sm:px-4 rounded-lg text-sm sm:text-base text-center">
+                          Out of Stock
+                        </div>
+                      ) : null}
+                      
+                      {/* View Details - Orange Button at Bottom */}
                       <Link
                         to={`/product/${product.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
                       >
                         <FaEye size={14} className="sm:w-4 sm:h-4" />
                         View Details
                       </Link>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddToCart(product);
-                        }}
-                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm sm:text-base"
-                      >
-                        <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
-                        Add to Cart
-                      </button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* No Results */}
-            {sortedProducts.length === 0 && (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">
-                  <FaSearch size={48} className="mx-auto" />
+            {/* Pagination */}
+            {!loading && filteredProducts.length > 0 && totalPages > 1 && (
+              <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 py-4 border-t border-gray-200">
+                <div className="text-sm text-gray-600">
+                  Showing page {currentPage} of {totalPages} ({totalItems} products total)
                 </div>
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">
-                  No products found
-                </h3>
-                <p className="text-gray-500">
-                  Try adjusting your search or filter criteria
-                </p>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-4 py-2 bg-[#002D7A] hover:bg-[#001C4C] text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <FaArrowLeft size={14} />
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-4 py-2 bg-[#002D7A] hover:bg-[#001C4C] text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    Next
+                    <FaArrowLeft size={14} className="rotate-180" />
+                  </button>
+                </div>
               </div>
             )}
-          </div>
+
+            {/* Back to Home Button */}
+            {!loading && (
+              <div className="mt-6 flex justify-center">
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg font-medium transition-colors"
+                >
+                  <FaArrowLeft size={16} />
+                  Back to Home
+                </Link>
+              </div>
+            )}
+
+            {/* No Results */}
+          {!loading && filteredProducts.length === 0 && (
+              <div className="text-center py-16 min-h-[400px] flex flex-col items-center justify-center">
+                <div className="text-gray-400 mb-6">
+                  <svg className="w-24 h-24 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-semibold text-gray-700 mb-3">
+                  इस कैटेगरी में कोई प्रोडक्ट उपलब्ध नहीं है
+                </h3>
+                <p className="text-lg text-gray-500 mb-6">
+                  No products available in <span className="font-semibold text-[#002D7A]">{currentCategory.title}</span> category at the moment.
+                </p>
+                <Link
+                  to="/products"
+                  className="inline-flex items-center gap-2 bg-[#002D7A] hover:bg-[#001C4C] text-white px-6 py-3 rounded-lg font-medium transition-colors"
+                >
+                  <FaArrowLeft size={16} />
+                  View All Products
+                </Link>
+              </div>
+            )}
         </div>
       </div>
 

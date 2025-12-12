@@ -74,8 +74,18 @@ try {
         $limit = isset($_GET['limit']) ? max(1, min(200, (int)$_GET['limit'])) : 20;
         $offset = ($page - 1) * $limit;
         $q = isset($_GET['q']) ? trim($_GET['q']) : '';
+        // Get category_id parameter - handle string and numeric values
+        $categoryIdParam = isset($_GET['category_id']) ? $_GET['category_id'] : null;
+        $categoryId = null;
+        if ($categoryIdParam !== null && $categoryIdParam !== '' && $categoryIdParam !== '0') {
+            $categoryId = (int)$categoryIdParam;
+            if ($categoryId <= 0) {
+                $categoryId = null;
+            }
+        }
 
         $where = '';
+        $whereParts = [];
         $searchColumns = [
             'p.name',
             'p.sku',
@@ -89,7 +99,12 @@ try {
             foreach ($searchColumns as $idx => $column) {
                 $likeParts[] = "{$column} LIKE :q{$idx}";
             }
-            $where = 'WHERE (' . implode(' OR ', $likeParts) . ')';
+            $whereParts[] = '(' . implode(' OR ', $likeParts) . ')';
+        }
+
+        // Add category filter if provided
+        if ($categoryId !== null && $categoryId > 0) {
+            $whereParts[] = "p.category_id = :category_id";
         }
 
         // Check if request is from admin (admin should see all products including inactive)
@@ -97,8 +112,19 @@ try {
         $isAdminRequest = isset($_SERVER['HTTP_X_API_KEY']) || isset($_GET['api_key']);
         
         // Build WHERE clause - admin sees all, website only sees active/out_of_stock
+        if (!empty($whereParts)) {
+            $where = 'WHERE ' . implode(' AND ', $whereParts);
+        }
         $statusFilter = $isAdminRequest ? '' : " AND p.status != 'inactive'";
-        $whereClause = $where ? $where . $statusFilter : ($statusFilter ? "WHERE" . substr($statusFilter, 4) : "");
+        
+        // Build final WHERE clause
+        if (!empty($where)) {
+            $whereClause = $where . $statusFilter;
+        } else if (!empty($statusFilter)) {
+            $whereClause = 'WHERE' . substr($statusFilter, 4); // Remove leading " AND"
+        } else {
+            $whereClause = '';
+        }
         
         $countSql = "SELECT COUNT(*) FROM products p " . $whereClause;
         $countStmt = $pdo->prepare($countSql);
@@ -106,6 +132,9 @@ try {
             foreach ($searchColumns as $idx => $_) {
                 $countStmt->bindValue(":q{$idx}", "%{$q}%", PDO::PARAM_STR);
             }
+        }
+        if ($categoryId !== null && $categoryId > 0) {
+            $countStmt->bindValue(":category_id", $categoryId, PDO::PARAM_INT);
         }
         $countStmt->execute();
         $total = (int)$countStmt->fetchColumn();
@@ -124,6 +153,9 @@ try {
             foreach ($searchColumns as $idx => $_) {
                 $stmt->bindValue(":q{$idx}", "%{$q}%", PDO::PARAM_STR);
             }
+        }
+        if ($categoryId !== null && $categoryId > 0) {
+            $stmt->bindValue(":category_id", $categoryId, PDO::PARAM_INT);
         }
         $stmt->execute();
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);

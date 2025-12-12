@@ -27,6 +27,7 @@ function ProductsPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [toast, setToast] = useState({ isOpen: false, message: "", type: "success" });
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [quantities, setQuantities] = useState({});
@@ -35,6 +36,8 @@ function ProductsPage() {
   
   // Debounce timer ref for input field
   const inputDebounceTimer = useRef({});
+  // Track touch positions to prevent accidental clicks during scroll
+  const touchStartPos = useRef({});
   const { addItemToCart, getCartCount, cartItems, updateItemQuantity } = useCart();
   const { addItem: addToWishlist, removeItem: removeFromWishlist, isInWishlist } = useWishlist();
   
@@ -48,12 +51,27 @@ function ProductsPage() {
     return cartItems.find(item => item.product_id === productId || item.id === productId);
   };
 
+  // ✅ Sync searchTerm with URL params (from Navbar search)
+  useEffect(() => {
+    const urlSearch = searchParams.get('q') || "";
+    // Always sync with URL, even if empty - prevent state mismatch
+    if (urlSearch !== searchTerm) {
+      setSearchTerm(urlSearch);
+    }
+  }, [searchParams]);
+
   // ✅ Fetch categories from backend
   useEffect(() => {
     async function fetchCategories() {
       try {
         const cats = await getCategories();
-        setCategories(cats || []);
+        // Filter out invalid categories (only numbers, empty names, etc.)
+        const validCategories = (cats || []).filter(cat => {
+          const name = (cat.name || '').trim();
+          // Filter out: empty names, only numbers, names shorter than 2 characters
+          return name.length >= 2 && !/^\d+$/.test(name);
+        });
+        setCategories(validCategories);
       } catch (error) {
         // Silently handle error
       }
@@ -63,20 +81,54 @@ function ProductsPage() {
 
   // ✅ Fetch products from backend with debouncing for search
   useEffect(() => {
-    const timeoutId = setTimeout(async () => {
+    // Clear any existing timeout
+    let timeoutId;
+    let isMounted = true;
+    
+    const fetchProducts = async () => {
+      if (!isMounted) return;
+      
       setLoading(true);
       try {
-        const data = await getProducts(null, 1, searchTerm);
-        setProducts(data || []);
+        // Trim search term to avoid issues with whitespace
+        const trimmedSearch = searchTerm.trim();
+        // Always fetch products - empty search means fetch all products
+        const data = await getProducts(1000, 1, trimmedSearch); // Fetch more products for category filtering
+        
+        if (isMounted) {
+          // Handle new API response format: {products: [], total: 0, ...}
+          const productsArray = data?.products || (Array.isArray(data) ? data : []);
+          setProducts(productsArray);
+          setInitialLoadDone(true);
+          setLoading(false);
+        }
       } catch (error) {
-        // Silently handle error
-      } finally {
-        setLoading(false);
+        console.error('Error fetching products:', error);
+        if (isMounted) {
+          // Set empty array on error - this will show "no products" message instead of white screen
+          // Don't reset initialLoadDone to false - keep it true so UI shows properly
+          setProducts([]);
+          setInitialLoadDone(true);
+          setLoading(false);
+        }
       }
-    }, searchTerm ? 300 : 0); // 300ms debounce for search, no delay for initial load
+    };
 
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm, initialSearch]);
+    // Debounce search: 300ms delay if searchTerm exists, immediate if empty
+    if (searchTerm.trim()) {
+      timeoutId = setTimeout(fetchProducts, 300);
+    } else {
+      // If search is cleared or empty, fetch all products immediately
+      fetchProducts();
+    }
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [searchTerm]);
 
   // Sync quantities from cart items when cart loads
   useEffect(() => {
@@ -101,8 +153,9 @@ function ProductsPage() {
     }
   }, [cartItems]);
 
-  // ✅ Filter products
-  const filteredProducts = products.filter((product) => {
+  // ✅ Filter products - ensure products is always an array
+  const safeProducts = Array.isArray(products) ? products : [];
+  const filteredProducts = safeProducts.filter((product) => {
     // Hide inactive products completely
     if (product.status === 'inactive') {
       return false;
@@ -160,7 +213,15 @@ function ProductsPage() {
   });
 
   // Handle quantity change - update cart immediately if item is in cart
-  const handleQuantityChange = async (productId, change) => {
+  const handleQuantityChange = async (productId, change, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.target) {
+        e.target.blur();
+      }
+    }
+    
     const customer = getLoggedInCustomer();
     if (!customer) {
       setShowLoginPrompt(true);
@@ -237,11 +298,44 @@ function ProductsPage() {
     }, 500);
   };
 
+  // Helper function to handle touch start - track position
+  const handleTouchStart = (e, key) => {
+    const touch = e.touches[0];
+    touchStartPos.current[key] = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+  };
+
+  // Helper function to check if touch was a proper click (not scroll)
+  const isProperClick = (e, key) => {
+    if (!touchStartPos.current[key]) return false;
+    
+    const touch = e.changedTouches[0];
+    const startPos = touchStartPos.current[key];
+    const deltaX = Math.abs(touch.clientX - startPos.x);
+    const deltaY = Math.abs(touch.clientY - startPos.y);
+    const deltaTime = Date.now() - startPos.time;
+    
+    // Clear the stored position
+    delete touchStartPos.current[key];
+    
+    // Consider it a proper click if:
+    // - Movement is less than 10px (not scrolling)
+    // - Time is less than 300ms (quick tap)
+    return deltaX < 10 && deltaY < 10 && deltaTime < 300;
+  };
+
   // Handle add to cart button click - directly add 1 quantity if not in cart, otherwise show selector
   const handleAddToCartClick = async (productId, e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
+      // Prevent scroll to top
+      if (e.target) {
+        e.target.blur();
+      }
     }
     
     const customer = getLoggedInCustomer();
@@ -284,6 +378,10 @@ function ProductsPage() {
     if (e) {
       e.preventDefault(); // Prevent any form submission or page refresh
       e.stopPropagation();
+      // Prevent scroll to top
+      if (e.target) {
+        e.target.blur();
+      }
     }
     
     const quantity = quantities[product.id] || 1;
@@ -342,111 +440,181 @@ function ProductsPage() {
     </div>
   );
 
+  // Check if searching - show header when search is empty or cleared
+  const isSearching = searchTerm.trim().length > 0;
+
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-8 sm:py-10 lg:py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4">
-              All Products
-            </h1>
-            <p className="text-base sm:text-lg lg:text-xl text-blue-100">
-              Discover our complete range of stationery and office supplies
-            </p>
+      {/* Header - Show when NOT searching (search is empty/cleared) */}
+      {!isSearching ? (
+        <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-8 sm:py-10 lg:py-12">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-3 sm:mb-4">
+                All Products
+              </h1>
+              <p className="text-base sm:text-lg lg:text-xl text-blue-100">
+                Discover our complete range of stationery and office supplies
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        // Show search results header when searching
+        <div className="bg-gradient-to-r from-[#002D7A] to-[#001C4C] text-white py-4 sm:py-6">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">
+                Search Results
+              </h2>
+              <p className="text-sm sm:text-base text-blue-100">
+                Found {sortedProducts.length} products for "{searchTerm}"
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Main Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+      {/* Main Section - Always has background to prevent white screen */}
+      <div className={`max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 ${isSearching ? 'py-2 sm:py-4' : 'py-4 sm:py-6 lg:py-8'} min-h-[60vh] bg-white`}>
         <div className="flex flex-col lg:flex-row gap-8">
-          {/* Sidebar Filters */}
-          <div
-            className={`lg:w-1/4 ${showFilters ? "block" : "hidden lg:block"}`}
-          >
-            <div className="bg-white border border-gray-200 rounded-lg p-6 sticky top-4">
-              <div className="flex items-center justify-between mb-6">
+          {/* Sidebar Filters - Category Buttons (Desktop) */}
+          <div className="hidden lg:block lg:w-1/4">
+            <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6 sticky top-4">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
                 <h3 className="text-lg font-semibold text-[#002D7A]">
-                  Filters
+                  Categories
                 </h3>
+              </div>
+
+              {/* Category Buttons */}
+              <div className="space-y-2">
                 <button
-                  onClick={() => setShowFilters(false)}
-                  className="lg:hidden text-gray-500 hover:text-gray-700"
+                  onClick={() => {
+                    setSelectedCategory("All");
+                    navigate('/products');
+                  }}
+                  className={`w-full text-left px-4 py-2.5 rounded-lg transition-colors ${
+                    selectedCategory === "All"
+                      ? "bg-[#002D7A] text-white font-medium"
+                      : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                  }`}
                 >
-                  ✕
+                  All Categories
                 </button>
-              </div>
-
-              {/* Search */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search Products
-                </label>
-                <div className="relative">
-                  <FaSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search products..."
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              {/* Category */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Category
-                </label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
-                >
-                  <option value="All">All Categories</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Sort */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Sort By
-                </label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#002D7A] focus:border-transparent"
-                >
-                  <option value="name">Name A-Z</option>
-                  <option value="price-low">Price: Low to High</option>
-                  <option value="price-high">Price: High to Low</option>
-                  <option value="rating">Highest Rated</option>
-                  <option value="featured">Featured</option>
-                </select>
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => {
+                      setSelectedCategory(category.id);
+                      // Navigate to category page when category is selected
+                      const categorySlug = category.slug || category.name?.toLowerCase().replace(/\s+/g, '-') || category.id;
+                      navigate(`/category/${categorySlug}`);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 rounded-lg transition-colors ${
+                      selectedCategory === category.id || selectedCategory === category.id.toString()
+                        ? "bg-[#002D7A] text-white font-medium"
+                        : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {category.name}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
 
           {/* Products List */}
-          <div className="lg:w-3/4">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setShowFilters(true)}
-                  className="lg:hidden flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                >
-                  <FaFilter />
-                  Filters
-                </button>
+          <div className="w-full lg:w-3/4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-4">
+              <div className="flex items-center gap-4 w-full sm:w-auto">
+                {/* Mobile Category Dropdown Button */}
+                <div className="relative lg:hidden">
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white w-full sm:w-auto min-w-[140px] justify-between"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FaFilter />
+                      <span className="text-sm font-medium">
+                        {selectedCategory === "All" 
+                          ? "Categories" 
+                          : categories.find(c => c.id === selectedCategory || c.id.toString() === selectedCategory.toString())?.name || "Category"
+                        }
+                      </span>
+                    </div>
+                    <span className="text-gray-400">▼</span>
+                  </button>
+                  
+                  {/* Mobile Dropdown Menu */}
+                  {showFilters && (
+                    <>
+                      {/* Backdrop */}
+                      <div 
+                        className="fixed inset-0 bg-black/20 z-40 lg:hidden"
+                        onClick={() => setShowFilters(false)}
+                      />
+                      {/* Dropdown Box - Compact */}
+                      <div className="absolute top-full left-0 mt-2 w-full sm:w-80 bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-[50vh] overflow-hidden flex flex-col">
+                        <div className="p-3 border-b border-gray-200 bg-white flex-shrink-0">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-[#002D7A]">Select Category</h3>
+                            <button
+                              onClick={() => setShowFilters(false)}
+                              className="text-gray-500 hover:text-gray-700 text-lg leading-none"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                        <div className="p-2 space-y-1 overflow-y-auto flex-1">
+                          <button
+                            onClick={() => {
+                              setSelectedCategory("All");
+                              navigate('/products');
+                              setShowFilters(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm ${
+                              selectedCategory === "All"
+                                ? "bg-[#002D7A] text-white font-medium"
+                                : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                            }`}
+                          >
+                            All Categories
+                          </button>
+                          {categories.map((category) => (
+                            <button
+                              key={category.id}
+                              onClick={() => {
+                                setSelectedCategory(category.id);
+                                const categorySlug = category.slug || category.name?.toLowerCase().replace(/\s+/g, '-') || category.id;
+                                navigate(`/category/${categorySlug}`);
+                                setShowFilters(false);
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg transition-colors text-sm ${
+                                selectedCategory === category.id || selectedCategory === category.id.toString()
+                                  ? "bg-[#002D7A] text-white font-medium"
+                                  : "bg-gray-50 text-gray-700 hover:bg-gray-100"
+                              }`}
+                            >
+                              {category.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <div className="text-sm text-gray-600">
-                  {sortedProducts.length} products found
+                  {isSearching ? (
+                    <>
+                      Searching: <span className="font-medium">"{searchTerm}"</span>
+                    </>
+                  ) : (
+                    <>
+                      {sortedProducts.length} products found
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -459,10 +627,10 @@ function ProductsPage() {
               </div>
             </div>
 
-            {/* Products Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-              {loading && sortedProducts.length === 0 ? (
-                // Show skeleton loaders while loading (only if no products yet)
+            {/* Products Grid - Always render to prevent white screen */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6 min-h-[400px]">
+              {loading && !initialLoadDone ? (
+                // Show skeleton loaders while loading (only on initial load)
                 Array.from({ length: 6 }).map((_, index) => (
                   <ProductSkeleton key={`skeleton-${index}`} />
                 ))
@@ -611,16 +779,7 @@ function ProductsPage() {
                     )}
 
                     <div className="space-y-2 mt-auto">
-                      <Link
-                        to={`/product/${product.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
-                      >
-                        <FaEye size={14} className="sm:w-4 sm:h-4" />
-                        View Details
-                      </Link>
-                      
-                      {/* Quantity Selector & Add to Cart */}
+                      {/* Quantity Selector & Add to Cart - Blue Button at Top */}
                       {canSeePrices() && product.status === 'active' && product.status !== 'out_of_stock' ? (
                         <div>
                           {showQuantitySelector[product.id] ? (
@@ -631,16 +790,21 @@ function ProductsPage() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleQuantityChange(product.id, -1);
+                                e.target.blur();
+                                handleQuantityChange(product.id, -1, e);
                               }}
                               onTouchStart={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                handleTouchStart(e, `qty-minus-${product.id}`);
                               }}
                               onTouchEnd={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleQuantityChange(product.id, -1);
+                                if (isProperClick(e, `qty-minus-${product.id}`)) {
+                                  e.target.blur();
+                                  handleQuantityChange(product.id, -1, e);
+                                }
                               }}
                               onMouseDown={(e) => {
                                 e.preventDefault();
@@ -677,16 +841,21 @@ function ProductsPage() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleQuantityChange(product.id, 1);
+                                e.target.blur();
+                                handleQuantityChange(product.id, 1, e);
                               }}
                               onTouchStart={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                handleTouchStart(e, `qty-plus-${product.id}`);
                               }}
                               onTouchEnd={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleQuantityChange(product.id, 1);
+                                if (isProperClick(e, `qty-plus-${product.id}`)) {
+                                  e.target.blur();
+                                  handleQuantityChange(product.id, 1, e);
+                                }
                               }}
                               onMouseDown={(e) => {
                                 e.preventDefault();
@@ -702,18 +871,28 @@ function ProductsPage() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
+                                  e.target.blur();
                                   addToCart(product, e);
                                 }}
                                 onTouchStart={(e) => {
+                                  e.preventDefault();
                                   e.stopPropagation();
+                                  handleTouchStart(e, `add-cart-${product.id}`);
                                 }}
                                 onTouchEnd={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  addToCart(product, e);
+                                  if (isProperClick(e, `add-cart-${product.id}`)) {
+                                    e.target.blur();
+                                    addToCart(product, e);
+                                  }
+                                }}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
                                 }}
                                 disabled={addingToCart[product.id]}
-                                className="flex-1 bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
+                                className="flex-1 bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation"
                               >
                                 <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                                 {addingToCart[product.id] ? 'Adding...' : 'Add to Cart'}
@@ -725,17 +904,27 @@ function ProductsPage() {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleAddToCartClick(product.id);
+                                e.target.blur();
+                                handleAddToCartClick(product.id, e);
                               }}
                               onTouchStart={(e) => {
+                                e.preventDefault();
                                 e.stopPropagation();
+                                handleTouchStart(e, `add-cart-btn-${product.id}`);
                               }}
                               onTouchEnd={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                handleAddToCartClick(product.id);
+                                if (isProperClick(e, `add-cart-btn-${product.id}`)) {
+                                  e.target.blur();
+                                  handleAddToCartClick(product.id, e);
+                                }
                               }}
-                              className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base touch-manipulation"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base touch-manipulation"
                             >
                               <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
                               Add to Cart
@@ -747,27 +936,61 @@ function ProductsPage() {
                           Out of Stock
                         </div>
                       ) : null}
+                      
+                      {/* View Details - Orange Button at Bottom */}
+                      <Link
+                        to={`/product/${product.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-[#FE7F06] hover:bg-[#E66F00] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base"
+                      >
+                        <FaEye size={14} className="sm:w-4 sm:h-4" />
+                        View Details
+                      </Link>
                     </div>
                   </div>
                 </div>
               ))
-              ) : null}
-            </div>
-
-            {/* No Results */}
-            {!loading && sortedProducts.length === 0 && (
-              <div className="text-center py-12">
-                <div className="text-gray-400 mb-4">
-                  <FaSearch size={48} className="mx-auto" />
+              ) : (
+                // No Results - Always show when not loading and no products (NEVER show white screen)
+                <div className="col-span-full min-h-[400px] flex items-center justify-center">
+                  <div className="text-center py-12 px-4 max-w-md mx-auto">
+                    <div className="text-gray-400 mb-4">
+                      <FaSearch size={64} className="mx-auto" />
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">
+                      {isSearching ? `कोई उत्पाद नहीं मिला` : 'कोई उत्पाद उपलब्ध नहीं'}
+                    </h3>
+                    <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
+                      {isSearching ? `No products found for "${searchTerm}"` : 'No products available'}
+                    </h3>
+                    <p className="text-gray-600 mb-6 text-base">
+                      {isSearching 
+                        ? `हमें "${searchTerm}" के लिए कोई उत्पाद नहीं मिला। कृपया एक अलग कीवर्ड से खोजें या सभी उत्पाद देखें।`
+                        : 'इस श्रेणी में वर्तमान में कोई उत्पाद उपलब्ध नहीं हैं।'}
+                    </p>
+                    <p className="text-gray-500 mb-6 text-sm">
+                      {isSearching 
+                        ? 'Try searching with a different keyword or browse all products.'
+                        : 'No products are currently available in this category.'}
+                    </p>
+                    {isSearching && (
+                      <button
+                        onClick={() => {
+                          navigate("/products");
+                          // Clear search in Navbar by updating URL
+                          window.history.pushState({}, '', '/products');
+                          const event = new PopStateEvent('popstate');
+                          window.dispatchEvent(event);
+                        }}
+                        className="inline-flex items-center gap-2 bg-[#002D7A] hover:bg-[#001C4C] text-white px-6 py-3 rounded-lg font-medium transition-colors shadow-md hover:shadow-lg"
+                      >
+                        सभी उत्पाद देखें / View All Products
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">
-                  No products found
-                </h3>
-                <p className="text-gray-500">
-                  Try adjusting your search or filter criteria
-                </p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

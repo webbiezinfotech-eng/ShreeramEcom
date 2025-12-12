@@ -182,13 +182,24 @@ export async function getProducts(limit = 1000, page = 1): Promise<Product[]> {
 }
 
 export const productsAPI = {
-  getAll: (page = 1, limit = 20, search = "") => {
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: String(limit),
-      ...(search ? { q: search } : {}),
-    });
-    return apiCall(`endpoints/products.php?${params.toString()}`);
+  getAll: (page = 1, limit = 20, search = "", categoryId?: number | null) => {
+    // Build URL with all parameters
+    let url = `endpoints/products.php?page=${page}&limit=${limit}`;
+    
+    // Add search query if provided
+    if (search && search.trim() !== '') {
+      url += `&q=${encodeURIComponent(search.trim())}`;
+    }
+    
+    // Add category_id if provided and valid - CRITICAL: Must be a valid positive number
+    if (categoryId !== null && categoryId !== undefined) {
+      const catIdNum = Number(categoryId);
+      if (!isNaN(catIdNum) && catIdNum > 0 && Number.isInteger(catIdNum)) {
+        url += `&category_id=${catIdNum}`;
+      }
+    }
+    
+    return apiCall(url);
   },
   getById: (id: number) => apiCall(`endpoints/products.php?id=${id}`),
 

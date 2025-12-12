@@ -44,7 +44,7 @@ const normalize = (p: any): Product => ({
   dimensions: p.dimensions ?? "",
 });
 
-export const useProducts = (page = 1, limit = 20, search = "") => {
+export const useProducts = (page = 1, limit = 20, search = "", categoryId?: number | null) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +57,9 @@ export const useProducts = (page = 1, limit = 20, search = "") => {
     setLoading(true);
     setError(null);
     try {
-      const res: any = await productsAPI.getAll(currentPage, limit, search);
+      // Ensure categoryId is properly typed
+      const validCategoryId = (categoryId !== null && categoryId !== undefined && categoryId > 0) ? categoryId : null;
+      const res: any = await productsAPI.getAll(currentPage, limit, search, validCategoryId);
       const list = pickArray(res).map(normalize);
       const total = num(res?.total) || num(res?.count) || list.length;
       setProducts(list);
@@ -68,7 +70,7 @@ export const useProducts = (page = 1, limit = 20, search = "") => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, limit, search]);
+  }, [currentPage, limit, search, categoryId]);
 
   // 🔹 CREATE Product (accepts FormData or JSON)
   const createProduct = useCallback(async (data: FormData | Omit<Product, "id">) => {

@@ -5,10 +5,9 @@ export const API_BASE = "https://shreeram.webbiezinfotech.in/api";
 // For Mac browser testing, you can also use: "http://localhost:8000/api"
 
 // ✅ Get products
-export async function getProducts(limit = null, page = 1, search = '') {
+export async function getProducts(limit = 20, page = 1, search = '') {
   try {
-    let url = `${API_BASE}/endpoints/products.php?api_key=SHREERAMstore&page=${page}`;
-    if (limit) url += `&limit=${limit}`;
+    let url = `${API_BASE}/endpoints/products.php?api_key=SHREERAMstore&page=${page}&limit=${limit}`;
     if (search) url += `&q=${encodeURIComponent(search)}`;
     
     const res = await fetch(url, {
@@ -25,7 +24,7 @@ export async function getProducts(limit = null, page = 1, search = '') {
     // Handle API response format: {ok: true, items: [...], total, page, limit}
     if (data.ok && Array.isArray(data.items)) {
       // Map API response to component format
-      return data.items.map(item => {
+      const products = data.items.map(item => {
         // Construct full image URL if image path exists
         let imageUrl = '';
         if (item.image) {
@@ -52,19 +51,30 @@ export async function getProducts(limit = null, page = 1, search = '') {
           items_per_pack: parseInt(item.items_per_pack || 1)
         };
       });
+      
+      return {
+        products: products,
+        total: data.total || products.length,
+        page: data.page || page,
+        limit: data.limit || limit,
+        totalPages: data.total ? Math.ceil(data.total / (data.limit || limit)) : 1
+      };
     }
-    return [];
+    return { products: [], total: 0, page: 1, limit: limit, totalPages: 1 };
   } catch (err) {
     console.error("API Error:", err);
-    return [];
+    return { products: [], total: 0, page: 1, limit: limit, totalPages: 1 };
   }
 }
 
-// ✅ Get products by category
-export async function getProductsByCategory(categoryId, limit = null) {
+// ✅ Get products by category with pagination support
+export async function getProductsByCategory(categoryId, limit = 20, page = 1) {
   try {
-    let url = `${API_BASE}/endpoints/products.php?api_key=SHREERAMstore`;
-    if (limit) url += `&limit=${limit}`;
+    let url = `${API_BASE}/endpoints/products.php?api_key=SHREERAMstore&page=${page}&limit=${limit}`;
+    // Add category_id parameter to filter on backend
+    if (categoryId) {
+      url += `&category_id=${categoryId}`;
+    }
     
     const res = await fetch(url, {
       cache: 'no-store',
@@ -105,17 +115,19 @@ export async function getProductsByCategory(categoryId, limit = null) {
         };
       });
       
-      // Filter by category if categoryId provided
-      if (categoryId) {
-        products = products.filter(p => p.category_id === parseInt(categoryId) || p.category === categoryId);
-      }
-      
-      return products;
+      // Return products with pagination info
+      return {
+        products: products,
+        total: data.total || products.length,
+        page: data.page || page,
+        limit: data.limit || limit,
+        totalPages: data.total ? Math.ceil(data.total / (data.limit || limit)) : 1
+      };
     }
-    return [];
+    return { products: [], total: 0, page: 1, limit: limit, totalPages: 1 };
   } catch (err) {
     console.error("API Error:", err);
-    return [];
+    return { products: [], total: 0, page: 1, limit: limit, totalPages: 1 };
   }
 }
 
