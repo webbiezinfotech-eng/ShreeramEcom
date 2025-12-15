@@ -6,6 +6,10 @@ require_once __DIR__ . '/../db.php';
 require_api_key();
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+// Handle FormData with _method override (for PUT via POST)
+if ($method === 'POST' && isset($_POST['_method'])) {
+    $method = strtoupper($_POST['_method']);
+}
 $pdo = db();
 
 // Handle file upload for category image
@@ -40,7 +44,15 @@ if ($method === 'GET') {
         if (!$row) json_out(['error'=>'not_found'], 404);
         json_out($row);
     } else {
-        $stmt = $pdo->query('SELECT * FROM categories ORDER BY name ASC');
+        // Filter: Only show active categories for website, show all for admin
+        $includeInactive = isset($_GET['include_inactive']) && $_GET['include_inactive'] === '1';
+        if ($includeInactive) {
+            // Admin panel - show all categories
+            $stmt = $pdo->query('SELECT * FROM categories ORDER BY name ASC');
+        } else {
+            // Website - only show active categories
+            $stmt = $pdo->query("SELECT * FROM categories WHERE status = 'active' ORDER BY name ASC");
+        }
         json_out(['items'=>$stmt->fetchAll()]);
     }
 } elseif ($method === 'POST') {
@@ -111,12 +123,29 @@ if ($method === 'GET') {
             $updateValues[] = $imageFilename;
         }
         
+        // Update status if provided (always update status if provided in request)
+        if (isset($data['status']) && in_array($data['status'], ['active', 'inactive'])) {
+            $updateFields[] = 'status = ?';
+            $updateValues[] = $data['status'];
+        }
+        
+        // If no fields to update, return error
+        if (empty($updateFields)) {
+            json_out(['error'=>'no_fields_to_update'], 422);
+            exit;
+        }
+        
         $updateValues[] = $existingId;
         $sql = 'UPDATE categories SET ' . implode(', ', $updateFields) . ' WHERE id=?';
         $stmt = $pdo->prepare($sql);
         $stmt->execute($updateValues);
         
-        json_out(['id'=>$existingId, 'slug'=>$slug ?? $existingSlug, 'image'=>$imageFilename ?? $existingImage, 'updated'=>true], 200);
+        // Fetch updated category to return complete data
+        $fetchStmt = $pdo->prepare('SELECT * FROM categories WHERE id=?');
+        $fetchStmt->execute([$existingId]);
+        $updatedCategory = $fetchStmt->fetch();
+        
+        json_out(['id'=>$existingId, 'slug'=>$slug ?? $existingSlug, 'image'=>$imageFilename ?? $existingImage, 'status'=>$updatedCategory['status'] ?? 'active', 'updated'=>true], 200);
     } else {
         // Category doesn't exist - CREATE new one
         // Generate unique slug if not provided
@@ -140,9 +169,11 @@ if ($method === 'GET') {
             $counter++;
         }
         
-        $stmt = $pdo->prepare('INSERT INTO categories (name, slug, image) VALUES (?,?,?)');
-        $stmt->execute([$categoryName, $slug, $imageFilename]);
-        json_out(['id'=>$pdo->lastInsertId(), 'slug'=>$slug, 'image'=>$imageFilename, 'created'=>true], 201);
+        // Default status is 'active'
+        $status = isset($data['status']) && in_array($data['status'], ['active', 'inactive']) ? $data['status'] : 'active';
+        $stmt = $pdo->prepare('INSERT INTO categories (name, slug, image, status) VALUES (?,?,?,?)');
+        $stmt->execute([$categoryName, $slug, $imageFilename, $status]);
+        json_out(['id'=>$pdo->lastInsertId(), 'slug'=>$slug, 'image'=>$imageFilename, 'status'=>$status, 'created'=>true], 201);
     }
 } elseif ($method === 'PUT') {
     if (!isset($_GET['id'])) json_out(['error'=>'missing_id'], 422);
@@ -154,6 +185,10 @@ if ($method === 'GET') {
     
     if ($isMultipart) {
         $data = $_POST ?: [];
+        // Remove _method from data if present
+        if (isset($data['_method'])) {
+            unset($data['_method']);
+        }
         $imageFilename = handleCategoryImageUpload($id);
     } else {
         $data = body_json();
@@ -199,9 +234,15 @@ if ($method === 'GET') {
         $updateFields[] = 'image = ?';
         $updateValues[] = $imageFilename;
     }
+    // Always update status if provided
+    if (isset($data['status']) && in_array($data['status'], ['active', 'inactive'])) {
+        $updateFields[] = 'status = ?';
+        $updateValues[] = $data['status'];
+    }
     
     if (empty($updateFields)) {
         json_out(['error'=>'no_fields_to_update'], 422);
+        exit;
     }
     
     $updateValues[] = $id;
@@ -209,7 +250,12 @@ if ($method === 'GET') {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($updateValues);
     
-    json_out(['ok'=>true, 'slug'=>$slug ?? null, 'image'=>$imageFilename]);
+    // Fetch updated category to return complete data
+    $fetchStmt = $pdo->prepare('SELECT * FROM categories WHERE id=?');
+    $fetchStmt->execute([$id]);
+    $updatedCategory = $fetchStmt->fetch();
+    
+    json_out(['ok'=>true, 'slug'=>$slug ?? null, 'image'=>$imageFilename, 'status'=>$updatedCategory['status'] ?? 'active']);
 } elseif ($method === 'DELETE') {
     if (!isset($_GET['id'])) json_out(['error'=>'missing_id'], 422);
     $pdo->prepare('DELETE FROM categories WHERE id=?')->execute([(int)$_GET['id']]);

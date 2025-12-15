@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { 
   FaShoppingCart, 
@@ -29,9 +29,11 @@ function ProductDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [quantityInput, setQuantityInput] = useState('1');
   const [selectedImage, setSelectedImage] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const inputDebounceTimer = useRef(null);
 
   // Fetch product details and related products
   useEffect(() => {
@@ -47,35 +49,59 @@ function ProductDetail() {
         }
         
         const data = await getProductById(id);
-        if (data && data.item) {
-          // Construct full image URL if needed
-          let imageUrl = data.item.image;
+        console.log('ProductDetail - getProductById response:', data);
+        
+        // Check if product data exists - handle {ok: true, item: {...}} format
+        if (data && data.ok && data.item) {
+          const productItem = data.item;
+          
+          // Image URL is already processed in getProductById, use it directly
+          // Image URL is already processed in getProductById, but verify it's correct
+          // Keep 'api/' prefix as images are served from api/uploads/ folder
+          let imageUrl = productItem.image || productItem.image_url || '';
+          console.log('ProductDetail - Initial image URL from API:', imageUrl);
+          
+          // Only process if URL is not already complete
           if (imageUrl && !imageUrl.startsWith('http')) {
+            // Remove leading slash if present
+            if (imageUrl.startsWith('/')) {
+              imageUrl = imageUrl.substring(1);
+            }
+            // Keep 'api/' prefix - images are served from api/uploads/ folder
             // PRODUCTION SERVER
             imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
             // LOCAL DEVELOPMENT - Use Mac IP for phone testing
             // imageUrl = `http://192.168.1.6:8000/${imageUrl}`;
             // For Mac browser testing, you can also use: `http://localhost:8000/${imageUrl}`
           }
-          setProduct({ ...data.item, image: imageUrl });
+          
+          console.log('ProductDetail - Final image URL:', imageUrl);
+          console.log('ProductDetail - Full product item:', { ...productItem, image: imageUrl });
+          
+          setProduct({ ...productItem, image: imageUrl });
           
           // Fetch related products from same category
-          if (data.item.category_id) {
-            const related = await getProductsByCategory(data.item.category_id, 8);
+          if (productItem.category_id) {
+            const related = await getProductsByCategory(productItem.category_id, 8);
+            // Handle both array and object with products property
+            const relatedArray = Array.isArray(related) ? related : (related?.products || []);
             // Exclude current product, inactive products, and limit to 4
-            const filtered = related
+            const filtered = relatedArray
               .filter(p => p.id !== parseInt(id) && p.status !== 'inactive')
               .slice(0, 4);
             setRelatedProducts(filtered);
           } else {
             // If no category, fetch recent products
             const recent = await getProducts(4, 1);
-            const filtered = recent
+            // Handle both array and object with products property
+            const recentArray = Array.isArray(recent) ? recent : (recent?.products || []);
+            const filtered = recentArray
               .filter(p => p.id !== parseInt(id) && p.status !== 'inactive')
               .slice(0, 4);
             setRelatedProducts(filtered);
           }
         } else {
+          console.error('ProductDetail - Product not found, data:', data);
           setError("Product not found");
         }
       } catch (err) {
@@ -117,13 +143,42 @@ function ProductDetail() {
   // Check if product is in wishlist
   const isWishlisted = product ? isInWishlist(product.id) : false;
 
-  // Handle quantity changes
+  // Sync quantityInput with quantity
+  useEffect(() => {
+    setQuantityInput(quantity.toString());
+  }, [quantity]);
+
+  // Handle quantity changes via buttons
   const handleQuantityChange = (action) => {
     if (action === 'increase') {
-      setQuantity(prev => prev + 1);
+      const newQty = quantity + 1;
+      setQuantity(newQty);
+      setQuantityInput(newQty.toString());
     } else if (action === 'decrease' && quantity > 1) {
-      setQuantity(prev => prev - 1);
+      const newQty = quantity - 1;
+      setQuantity(newQty);
+      setQuantityInput(newQty.toString());
     }
+  };
+
+  // Handle direct quantity input
+  const handleQuantityInput = (value) => {
+    setQuantityInput(value);
+    
+    // Clear previous timer
+    if (inputDebounceTimer.current) {
+      clearTimeout(inputDebounceTimer.current);
+    }
+    
+    // Parse and validate input
+    const numValue = value === '' ? 1 : parseInt(value);
+    const validQty = isNaN(numValue) ? 1 : Math.max(1, numValue);
+    
+    // Update quantity after 300ms delay (debounce)
+    inputDebounceTimer.current = setTimeout(() => {
+      setQuantity(validQty);
+      setQuantityInput(validQty.toString());
+    }, 300);
   };
 
   // Add to cart using context
@@ -237,11 +292,30 @@ function ProductDetail() {
     );
   }
 
-  const productImages = (product.image && product.image.trim() !== '') ? [product.image] : [];
-
-  const discountPercentage = product.oldPrice 
-    ? Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)
-    : 0;
+  // Get product images - check both image and image_url, ensure URL is complete
+  const getProductImages = () => {
+    if (!product) return [];
+    
+    let imgUrl = product.image || product.image_url || '';
+    
+    // If image exists but doesn't start with http, construct full URL
+    if (imgUrl && !imgUrl.startsWith('http')) {
+      // Remove leading slash if present
+      if (imgUrl.startsWith('/')) {
+        imgUrl = imgUrl.substring(1);
+      }
+      // Keep 'api/' prefix - images are served from api/uploads/ folder
+      // PRODUCTION SERVER
+      imgUrl = `https://shreeram.webbiezinfotech.in/${imgUrl}`;
+    }
+    
+    return (imgUrl && imgUrl.trim() !== '') ? [imgUrl] : [];
+  };
+  
+  const productImages = getProductImages();
+  
+  console.log('ProductDetail - Product:', product);
+  console.log('ProductDetail - Product images:', productImages);
 
   return (
     <div className="min-h-screen bg-white">
@@ -285,18 +359,23 @@ function ProductDetail() {
               {productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? (
               <img
                 src={productImages[selectedImage]}
-                  alt={product.name || product.title || 'Product'}
+                alt={product.name || product.title || 'Product'}
                 className={`w-full h-full object-cover ${product.status !== 'active' ? 'opacity-50' : ''}`}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    const fallback = e.target.nextElementSibling;
-                    if (fallback) fallback.classList.remove('hidden');
-                  }}
+                onError={(e) => {
+                  console.error('ProductDetail - Image load error:', productImages[selectedImage], e);
+                  e.target.style.display = 'none';
+                  const fallback = e.target.nextElementSibling;
+                  if (fallback) fallback.classList.remove('hidden');
+                }}
+                onLoad={() => {
+                  console.log('ProductDetail - Image loaded successfully:', productImages[selectedImage]);
+                }}
               />
-              ) : null}
-              <div className={`${productImages.length > 0 && productImages[selectedImage] && productImages[selectedImage].trim() !== '' ? 'hidden' : ''} w-full h-full flex items-center justify-center ${product.status !== 'active' ? 'opacity-50' : ''}`}>
-                <span className="text-gray-400 text-4xl sm:text-5xl font-bold">{(product.name || product.title || 'P').charAt(0).toUpperCase()}</span>
-              </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <span className="text-gray-400 text-4xl sm:text-5xl font-bold">{(product.name || product.title || 'P').charAt(0).toUpperCase()}</span>
+                </div>
+              )}
               {/* Out of Stock Overlay */}
               {product.status !== 'active' && (
                 <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-20">
@@ -377,20 +456,19 @@ function ProductDetail() {
                     <div className="space-y-2">
                       <div>
                         <p className="text-xs text-gray-600 mb-1">Price per piece:</p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xl sm:text-2xl font-bold text-[#002D7A]">
-                            ₹{product.price}
-                          </span>
-                          {product.oldPrice && (
-                            <>
-                              <span className="text-base text-gray-400 line-through">
-                                ₹{product.oldPrice}
-                              </span>
-                              <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs font-medium">
-                                {discountPercentage}% OFF
-                              </span>
-                            </>
-                          )}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">MRP:</span>
+                            <span className="text-base text-gray-600">
+                              ₹{product.oldPrice || product.price}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-[#002D7A]">Wholesale Rate:</span>
+                            <span className="text-xl sm:text-2xl font-bold text-[#002D7A]">
+                              ₹{product.price}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="border-t border-blue-200 pt-2">
@@ -417,20 +495,19 @@ function ProductDetail() {
                 ) : (
                   // Regular Item - Show normal pricing
                   <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                      <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
-                        ₹{product.price}
-                      </span>
-                      {product.oldPrice && (
-                        <>
-                          <span className="text-lg sm:text-xl text-gray-400 line-through">
-                            ₹{product.oldPrice}
-                          </span>
-                          <span className="bg-red-100 text-red-600 px-2 py-1 rounded text-xs sm:text-sm font-medium">
-                            {discountPercentage}% OFF
-                          </span>
-                        </>
-                      )}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">MRP:</span>
+                        <span className="text-lg sm:text-xl text-gray-600">
+                          ₹{product.oldPrice || product.price}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-[#002D7A]">Wholesale Rate:</span>
+                        <span className="text-2xl sm:text-3xl font-bold text-[#002D7A]">
+                          ₹{product.price}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -468,20 +545,69 @@ function ProductDetail() {
               </h3>
               <div className="space-y-3">
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center border border-gray-300 rounded-lg">
+                  <div className="flex items-center border border-gray-300 rounded-lg bg-white">
                     <button
-                      onClick={() => handleQuantityChange('decrease')}
-                      className="p-3 hover:bg-gray-50 transition-colors"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.target.blur();
+                        handleQuantityChange('decrease');
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      className="p-3 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation select-none min-w-[40px] min-h-[40px] flex items-center justify-center"
                       disabled={quantity <= 1}
+                      type="button"
                     >
                       <FaMinus className="text-gray-500" size={12} />
                     </button>
-                    <span className="px-4 py-3 text-gray-800 font-medium min-w-[3rem] text-center">
-                      {quantity}
-                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={quantityInput}
+                      onChange={(e) => {
+                        // Don't prevent default - allow normal input behavior
+                        handleQuantityInput(e.target.value);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.target.select();
+                      }}
+                      onFocus={(e) => {
+                        e.target.select();
+                      }}
+                      onTouchStart={(e) => {
+                        e.stopPropagation();
+                      }}
+                      onTouchEnd={(e) => {
+                        // Allow touch to focus the input
+                        e.target.focus();
+                      }}
+                      className="w-16 sm:w-20 text-center border-0 focus:outline-none focus:ring-2 focus:ring-[#002D7A] text-base font-medium py-3 touch-manipulation min-h-[40px]"
+                    />
                     <button
-                      onClick={() => handleQuantityChange('increase')}
-                      className="p-3 hover:bg-gray-50 transition-colors"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.target.blur();
+                        handleQuantityChange('increase');
+                      }}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      className="p-3 hover:bg-gray-50 active:bg-gray-100 transition-colors touch-manipulation select-none min-w-[40px] min-h-[40px] flex items-center justify-center"
+                      type="button"
                     >
                       <FaPlus className="text-gray-500" size={12} />
                     </button>

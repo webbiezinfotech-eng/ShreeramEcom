@@ -132,6 +132,7 @@ export type Category = {
   name: string;
   slug?: string;
   image?: string | null;
+  status?: 'active' | 'inactive';
 };
 
 export type RecentCustomer = {
@@ -304,7 +305,12 @@ export const ordersAPI = {
 
 // ---------- API: Categories ----------
 export const categoriesAPI = {
-  getAll: () => apiCall("endpoints/categories.php"),
+  getAll: (includeInactive: boolean = true) => {
+    const url = includeInactive 
+      ? "endpoints/categories.php?include_inactive=1"
+      : "endpoints/categories.php";
+    return apiCall(url);
+  },
   getById: (id: number) => apiCall(`endpoints/categories.php?id=${id}`),
   create: (data: any) => {
     const isFormData = data instanceof FormData;

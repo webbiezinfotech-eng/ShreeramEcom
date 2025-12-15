@@ -132,7 +132,7 @@ function CategoryPage() {
       try {
         // First load categories
         const cats = await getCategories();
-        // Filter out invalid categories (only numbers, empty names, etc.)
+        // Filter out invalid categories (only numbers, empty names, etc.) for display
         const validCategories = (cats || []).filter(cat => {
           const name = (cat.name || '').trim();
           // Filter out: empty names, only numbers, names shorter than 2 characters
@@ -141,6 +141,7 @@ function CategoryPage() {
         setCategories(validCategories);
         
         // Then load products based on category
+        // Use original cats array for lookup (to find category by ID/slug even if filtered)
         let result = { products: [], total: 0, page: 1, limit: pageSize, totalPages: 1 };
         const currentCategory = category;
         
@@ -148,14 +149,14 @@ function CategoryPage() {
           // Fetch all products with pagination
           const allProds = await getProducts(pageSize, currentPage);
           result = {
-            products: allProds || [],
-            total: allProds?.length || 0,
+            products: allProds?.products || allProds || [],
+            total: allProds?.total || allProds?.length || 0,
             page: currentPage,
             limit: pageSize,
-            totalPages: 1
+            totalPages: allProds?.totalPages || 1
           };
         } else {
-          // Find category ID
+          // Find category ID - use original cats array for lookup
           let categoryId = null;
           
           // Try numeric ID first
@@ -193,7 +194,14 @@ function CategoryPage() {
             result = await getProductsByCategory(categoryId, pageSize, currentPage);
           } else {
             // Fallback: fetch all products
-            result = await getProducts(pageSize, currentPage);
+            const allProds = await getProducts(pageSize, currentPage);
+            result = {
+              products: allProds?.products || allProds || [],
+              total: allProds?.total || allProds?.length || 0,
+              page: currentPage,
+              limit: pageSize,
+              totalPages: allProds?.totalPages || 1
+            };
           }
         }
         
@@ -504,10 +512,10 @@ function CategoryPage() {
       if (cartItem) {
         const cartItemId = cartItem.cart_id || cartItem.id;
         const result = await updateItemQuantity(cartItemId, quantity);
-        if (result.success) {
+    if (result.success) {
           setToast({ isOpen: true, message: `${product.title || product.name} quantity updated to ${quantity}!`, type: "success" });
           setShowQuantitySelector(prev => ({ ...prev, [product.id]: true }));
-        } else {
+    } else {
           setToast({ isOpen: true, message: 'Failed to update cart', type: "error" });
         }
       } else {
@@ -576,7 +584,7 @@ function CategoryPage() {
         <div className="mb-4 sm:mb-6">
           {/* Mobile: Compact Category Button - Only shows selected category name */}
           <div className="lg:hidden relative">
-            <button
+                <button 
               onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
               className="flex items-center justify-between gap-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 bg-white w-full text-sm"
             >
@@ -608,8 +616,8 @@ function CategoryPage() {
                       >
                         ✕
                       </button>
-                    </div>
-                  </div>
+                </div>
+              </div>
                   <div className="p-1.5 space-y-0.5 overflow-y-auto flex-1">
                     <Link
                       to="/products"
@@ -640,12 +648,12 @@ function CategoryPage() {
                         </Link>
                       );
                     })}
-                  </div>
+                </div>
                 </div>
               </>
             )}
-          </div>
-          
+              </div>
+
           {/* Desktop: Show all category buttons */}
           <div className="hidden lg:flex flex-wrap gap-2 sm:gap-3">
             <Link
@@ -675,14 +683,14 @@ function CategoryPage() {
                 </Link>
               );
             })}
+            </div>
           </div>
-        </div>
 
-        {/* Main Content */}
+          {/* Main Content */}
         <div>
-          {/* Top Bar */}
+            {/* Top Bar */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-4">
-              <div className="text-sm text-gray-600">
+                <div className="text-sm text-gray-600">
               {filteredProducts.length} products found in {currentCategory.title}
               </div>
               
@@ -880,11 +888,11 @@ function CategoryPage() {
                                   }}
                                   className="w-12 sm:w-10 text-center border-0 focus:outline-none focus:ring-0 text-sm sm:text-xs font-medium py-1 touch-manipulation min-h-[32px]"
                                 />
-                                <button
+                      <button
                                   type="button"
-                                  onClick={(e) => {
+                        onClick={(e) => {
                                     e.preventDefault();
-                                    e.stopPropagation();
+                          e.stopPropagation();
                                     e.target.blur();
                                     handleQuantityChange(product.id, 1, e);
                                   }}
@@ -969,12 +977,12 @@ function CategoryPage() {
                                 e.stopPropagation();
                               }}
                               className="w-full bg-[#002D7A] hover:bg-[#001C4C] text-white font-medium py-2 px-3 sm:px-4 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm sm:text-base touch-manipulation"
-                            >
-                              <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
-                              Add to Cart
-                            </button>
+                      >
+                        <FaShoppingCart size={14} className="sm:w-4 sm:h-4" />
+                        Add to Cart
+                      </button>
                           )}
-                        </div>
+                    </div>
                       ) : product.status === 'out_of_stock' ? (
                         <div className="w-full bg-red-100 border border-red-300 text-red-700 font-medium py-2 px-3 sm:px-4 rounded-lg text-sm sm:text-base text-center">
                           Out of Stock

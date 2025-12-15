@@ -21,8 +21,15 @@ function Hero() {
   // 🔹 Fetch categories from API
   useEffect(() => {
     async function fetchData() {
-      const data = await getCategories();
-      setCategories(data);
+      try {
+        const data = await getCategories();
+        // Ensure data is always an array
+        const categoriesArray = Array.isArray(data) ? data : [];
+        setCategories(categoriesArray);
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        setCategories([]);
+      }
     }
     fetchData();
   }, []);
@@ -104,39 +111,42 @@ function Hero() {
 
           {/* Category Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-5 md:gap-6 mt-6 sm:mt-8 md:mt-10 lg:mt-12">
-            {categories.length > 0 ? (
-              categories.map((cat, index) => {
-                // Use category ID for routing (most reliable)
-                const categoryId = cat.id;
-                if (!categoryId) return null; // Skip if no ID
-                return (
-                  <Link key={cat.id || index} to={`/category/${categoryId}`} className="block">
-                    <div className="rounded-xl shadow-md md:shadow-lg border border-[#003fad2c] p-4 md:px-2 flex flex-col items-center hover:shadow-xl transition-shadow">
-                      {cat.image ? (
-                        <div className="w-16 h-16 rounded-full overflow-hidden mb-4 border-2 border-[#003fad23]">
-                          <img 
-                            src={`${API_BASE_URL}/api/uploads/${cat.image}`}
-                            alt={cat.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              e.target.parentElement.innerHTML = '<div class="w-16 h-16 bg-[#003fad23] rounded-full flex items-center justify-center">🎨</div>';
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
-                          🎨
-                        </div>
-                      )}
-                      <h3 className="font-semibold">{cat.name}</h3>
-                      <p className="text-gray-500 text-sm">
-                        {cat.items_count ? `${cat.items_count}+ items` : "Explore"}
-                      </p>
-                    </div>
-                  </Link>
-                );
-              }).filter(Boolean)
+            {Array.isArray(categories) && categories.length > 0 ? (
+              categories
+                .filter(cat => cat && cat.id) // Filter out invalid categories
+                .map((cat, index) => {
+                  // Use category ID for routing (most reliable)
+                  const categoryId = cat.id;
+                  if (!categoryId) return null; // Skip if no ID
+                  return (
+                    <Link key={cat.id || index} to={`/category/${categoryId}`} className="block">
+                      <div className="rounded-xl shadow-md md:shadow-lg border border-[#003fad2c] p-4 md:px-2 flex flex-col items-center hover:shadow-xl transition-shadow">
+                        {cat.image ? (
+                          <div className="w-16 h-16 rounded-full overflow-hidden mb-4 border-2 border-[#003fad23]">
+                            <img 
+                              src={`${API_BASE_URL}/api/uploads/${cat.image}`}
+                              alt={cat.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.parentElement.innerHTML = '<div class="w-16 h-16 bg-[#003fad23] rounded-full flex items-center justify-center">🎨</div>';
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 bg-[#003fad23] rounded-full flex items-center justify-center mb-4">
+                            🎨
+                          </div>
+                        )}
+                        <h3 className="font-semibold">{cat.name}</h3>
+                        <p className="text-gray-500 text-sm">
+                          {cat.items_count ? `${cat.items_count}+ items` : "Explore"}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })
+                .filter(Boolean)
             ) : (
               <p className="col-span-6 text-gray-500">Loading categories...</p>
             )}

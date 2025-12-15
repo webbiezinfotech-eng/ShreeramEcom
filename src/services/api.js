@@ -135,37 +135,61 @@ export async function getProductsByCategory(categoryId, limit = 20, page = 1) {
 export async function getProductById(id) {
   try {
     const res = await fetch(`${API_BASE}/endpoints/products.php?id=${id}&api_key=SHREERAMstore`);
-    if (!res.ok) throw new Error("Failed to fetch product");
+    if (!res.ok) {
+      console.error(`getProductById: HTTP error ${res.status}`);
+      throw new Error("Failed to fetch product");
+    }
     const data = await res.json();
+    console.log('getProductById raw response:', data);
     
     // Handle API response format: {ok: true, item: {...}}
-    if (data.ok && data.item) {
+    if (data && data.ok && data.item) {
       const item = data.item;
+      
+      // Handle image URL - check if it already has full path or needs base URL
+      let imageUrl = item.image || item.image_url || '';
+      console.log('getProductById - Raw image URL from API:', imageUrl);
+      
+      if (imageUrl && !imageUrl.startsWith('http')) {
+        // Remove leading slash if present
+        if (imageUrl.startsWith('/')) {
+          imageUrl = imageUrl.substring(1);
+        }
+        // Keep 'api/' prefix - images are served from api/uploads/ folder
+        // Construct full URL - use production server
+        imageUrl = `https://shreeram.webbiezinfotech.in/${imageUrl}`;
+      }
+      
+      console.log('getProductById - Processed image URL:', imageUrl);
+      
+      const productItem = {
+        id: item.id,
+        name: item.name,
+        title: item.name,
+        description: item.description || '',
+        price: parseFloat(item.wholesale_rate || item.mrp || 0),
+        oldPrice: item.mrp && item.wholesale_rate ? parseFloat(item.mrp) : null,
+        image: imageUrl,
+        category_name: item.category_name || '',
+        category_id: item.category_id,
+        sku: item.sku || '',
+        stock: item.stock || 0,
+        status: item.status || 'active',
+        rating: 4.5,
+        items_per_pack: parseInt(item.items_per_pack || 1)
+      };
+      
+      console.log('getProductById processed item:', productItem);
       return {
         ok: true,
-        item: {
-          id: item.id,
-          name: item.name,
-          title: item.name,
-          description: item.description || '',
-          price: parseFloat(item.wholesale_rate || item.mrp || 0),
-          oldPrice: item.mrp && item.wholesale_rate ? parseFloat(item.mrp) : null,
-          image: item.image 
-            ? (item.image.startsWith('http') ? item.image : `${API_BASE.replace('/api', '')}/${item.image}`)
-            : '',
-          category_name: item.category_name || '',
-          category_id: item.category_id,
-          sku: item.sku || '',
-          stock: item.stock || 0,
-          status: item.status || 'active',
-          rating: 4.5,
-          items_per_pack: parseInt(item.items_per_pack || 1)
-        }
+        item: productItem
       };
     }
+    
+    console.warn('getProductById: Invalid response format', data);
     return { ok: false, item: null };
   } catch (err) {
-    console.error("API Error:", err);
+    console.error("getProductById API Error:", err);
     return { ok: false, item: null };
   }
 }
@@ -175,7 +199,9 @@ export async function getCategories() {
     const res = await fetch(`${API_BASE}/endpoints/categories.php?api_key=SHREERAMstore`);
     if (!res.ok) throw new Error("Failed to fetch categories");
     const data = await res.json();
-    return data.items || [];
+    // Ensure we always return an array
+    const items = data.items || (Array.isArray(data) ? data : []);
+    return Array.isArray(items) ? items : [];
   } catch (err) {
     console.error("API Error (categories):", err);
     return [];

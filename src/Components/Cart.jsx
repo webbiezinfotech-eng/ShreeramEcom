@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { FaPlus, FaMinus, FaTrash, FaShoppingBag, FaArrowLeft, FaTimes, FaExclamationTriangle } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
@@ -13,11 +13,80 @@ function Cart() {
   } = useCart();
   
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, itemId: null, itemName: null });
+  const [quantityInputs, setQuantityInputs] = useState({});
+  const inputDebounceTimer = useRef({});
+  const touchStartPos = useRef({});
 
   // Load cart items when component mounts
   useEffect(() => {
     loadCartItems();
   }, [loadCartItems]);
+
+  // Sync quantity inputs with cart items
+  useEffect(() => {
+    const newInputs = {};
+    cartItems.forEach(item => {
+      const itemId = item.cart_id || item.id;
+      if (itemId) {
+        newInputs[itemId] = item.quantity || 1;
+      }
+    });
+    setQuantityInputs(newInputs);
+  }, [cartItems]);
+
+  // Helper function to handle touch start - track position
+  const handleTouchStart = (e, key) => {
+    const touch = e.touches[0];
+    touchStartPos.current[key] = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now()
+    };
+  };
+
+  // Helper function to check if it's a proper click (not a scroll)
+  const isProperClick = (e, key) => {
+    if (!touchStartPos.current[key]) return true;
+    const start = touchStartPos.current[key];
+    const touch = e.changedTouches[0];
+    const deltaX = Math.abs(touch.clientX - start.x);
+    const deltaY = Math.abs(touch.clientY - start.y);
+    const deltaTime = Date.now() - start.time;
+    // Consider it a click if movement is less than 10px and time is less than 300ms
+    return deltaX < 10 && deltaY < 10 && deltaTime < 300;
+  };
+
+  // Handle direct quantity input - update cart with debounce
+  const handleQuantityInput = async (itemId, value) => {
+    const item = cartItems.find(item => (item.cart_id || item.id) === itemId);
+    if (!item) return;
+
+    // Allow empty string for typing, but treat invalid values as 1
+    const numValue = value === '' ? 1 : parseInt(value);
+    const validQty = isNaN(numValue) ? 1 : Math.max(1, numValue);
+    
+    // Update local state immediately
+    setQuantityInputs(prev => ({ ...prev, [itemId]: validQty }));
+    
+    // Clear previous timer
+    if (inputDebounceTimer.current[itemId]) {
+      clearTimeout(inputDebounceTimer.current[itemId]);
+    }
+    
+    // Debounce cart update - wait 500ms after user stops typing
+    inputDebounceTimer.current[itemId] = setTimeout(async () => {
+      try {
+        const actualItemId = item.id ? parseInt(item.id) : null;
+        if (actualItemId && !isNaN(actualItemId)) {
+          await updateItemQuantity(actualItemId, validQty);
+        }
+      } catch (error) {
+        console.error('Error updating cart quantity:', error);
+        // Reload cart on error
+        await loadCartItems();
+      }
+    }, 500);
+  };
 
   const updateQuantity = async (id, change) => {
     try {
@@ -34,6 +103,9 @@ function Cart() {
         if (!itemId || isNaN(itemId)) {
           return;
         }
+        
+        // Update local input state immediately
+        setQuantityInputs(prev => ({ ...prev, [id]: newQuantity }));
         
         // Update quantity - context will handle optimistic update
         await updateItemQuantity(itemId, newQuantity);
@@ -258,24 +330,79 @@ function Cart() {
                               onClick={async (e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                e.target.blur();
                                 await updateQuantity(item.cart_id || item.id, -1);
                               }}
-                              className="p-1.5 sm:p-2 hover:bg-gray-50 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleTouchStart(e, `qty-minus-${item.cart_id || item.id}`);
+                              }}
+                              onTouchEnd={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isProperClick(e, `qty-minus-${item.cart_id || item.id}`)) {
+                                  e.target.blur();
+                                  await updateQuantity(item.cart_id || item.id, -1);
+                                }
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-1.5 sm:p-2 hover:bg-gray-50 active:bg-gray-100 transition-colors rounded-l-lg disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
                               disabled={parseInt(item.quantity || 1) <= 1}
                               type="button"
                             >
                               <FaMinus className="text-gray-500" size={10} />
                             </button>
-                            <span className="px-2 sm:px-3 py-1.5 sm:py-2 text-gray-800 font-medium min-w-[2rem] sm:min-w-[2.5rem] text-center text-xs sm:text-sm">
-                              {item.quantity}
-                            </span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={quantityInputs[item.cart_id || item.id] || item.quantity || 1}
+                              onChange={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleQuantityInput(item.cart_id || item.id, e.target.value);
+                              }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.target.select();
+                              }}
+                              onTouchStart={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onFocus={(e) => {
+                                e.target.select();
+                              }}
+                              className="w-12 sm:w-14 text-center border-0 focus:outline-none focus:ring-0 text-xs sm:text-sm font-medium py-1.5 sm:py-2 touch-manipulation min-h-[32px]"
+                            />
                             <button
                               onClick={async (e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                e.target.blur();
                                 await updateQuantity(item.cart_id || item.id, 1);
                               }}
-                              className="p-1.5 sm:p-2 hover:bg-gray-50 transition-colors rounded-r-lg"
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleTouchStart(e, `qty-plus-${item.cart_id || item.id}`);
+                              }}
+                              onTouchEnd={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (isProperClick(e, `qty-plus-${item.cart_id || item.id}`)) {
+                                  e.target.blur();
+                                  await updateQuantity(item.cart_id || item.id, 1);
+                                }
+                              }}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                              className="p-1.5 sm:p-2 hover:bg-gray-50 active:bg-gray-100 transition-colors rounded-r-lg touch-manipulation select-none min-w-[32px] min-h-[32px] flex items-center justify-center"
                               type="button"
                             >
                               <FaPlus className="text-gray-500" size={10} />
@@ -444,3 +571,4 @@ function Cart() {
 }
 
 export default Cart;
+

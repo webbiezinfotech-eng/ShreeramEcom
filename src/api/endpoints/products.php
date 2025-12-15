@@ -46,11 +46,16 @@ try {
         // single by id
         if (isset($_GET['id'])) {
             $id = (int)$_GET['id'];
+            $isAdminRequest = isset($_SERVER['HTTP_X_API_KEY']) || isset($_GET['api_key']);
+            
+            // For website, filter out products from inactive categories
+            $categoryFilter = $isAdminRequest ? '' : " AND (c.status = 'active' OR c.status IS NULL)";
+            
             $st = $pdo->prepare("
                 SELECT p.*, COALESCE(c.name,'') AS category_name
                 FROM products p
                 LEFT JOIN categories c ON c.id = p.category_id
-                WHERE p.id = :id
+                WHERE p.id = :id" . $categoryFilter . "
                 LIMIT 1
             ");
             $st->execute([':id' => $id]);
@@ -110,6 +115,11 @@ try {
         // Check if request is from admin (admin should see all products including inactive)
         // Admin requests come with API key, so we check if API key is present
         $isAdminRequest = isset($_SERVER['HTTP_X_API_KEY']) || isset($_GET['api_key']);
+        
+        // Filter out products from inactive categories (for website only)
+        if (!$isAdminRequest) {
+            $whereParts[] = "(c.status = 'active' OR c.status IS NULL)";
+        }
         
         // Build WHERE clause - admin sees all, website only sees active/out_of_stock
         if (!empty($whereParts)) {
